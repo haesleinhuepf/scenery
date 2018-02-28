@@ -79,7 +79,12 @@ layout(push_constant) uniform currentEye_t {
     ObjectTextures[5] - displacement
 */
 
-layout(set = 4, binding = 0) uniform sampler2D ObjectTextures[NUM_OBJECT_TEXTURES];
+layout(set = 4, binding = 0) uniform sampler2D ObjectTexturesAmbient;
+layout(set = 4, binding = 1) uniform sampler2D ObjectTexturesDiffuse;
+layout(set = 4, binding = 2) uniform sampler2D ObjectTexturesSpecular;
+layout(set = 4, binding = 3) uniform sampler2D ObjectTexturesNormal;
+layout(set = 4, binding = 4) uniform sampler2D ObjectTexturesAlpha;
+layout(set = 4, binding = 5) uniform sampler2D ObjectTexturesDisplacement;
 
 // courtesy of Christian Schueler - http://www.thetenthplanet.de/archives/1180
 mat3 TBN(vec3 N, vec3 position, vec2 uv) {
@@ -148,16 +153,16 @@ void main() {
     }
 
     if((materialType & MATERIAL_HAS_DIFFUSE) == MATERIAL_HAS_DIFFUSE) {
-        DiffuseAlbedo.rgb = texture(ObjectTextures[1], Vertex.TexCoord).rgb;
+        DiffuseAlbedo.rgb = texture(ObjectTexturesDiffuse, Vertex.TexCoord).rgb;
     }
 
     if((materialType & MATERIAL_HAS_SPECULAR) == MATERIAL_HAS_SPECULAR) {
-        DiffuseAlbedo.a = texture(ObjectTextures[2], Vertex.TexCoord).r;
-        NormalsMaterial.b = texture(ObjectTextures[2], Vertex.TexCoord).r;
+        DiffuseAlbedo.a = texture(ObjectTexturesSpecular, Vertex.TexCoord).r;
+        NormalsMaterial.b = texture(ObjectTexturesSpecular, Vertex.TexCoord).r;
     }
 
     if((materialType & MATERIAL_HAS_ALPHAMASK) == MATERIAL_HAS_ALPHAMASK) {
-        if(texture(ObjectTextures[4], Vertex.TexCoord).r < 0.1f) {
+        if(texture(ObjectTexturesAlpha, Vertex.TexCoord).r < 0.1f) {
             discard;
         }
     }

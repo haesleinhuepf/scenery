@@ -1,9 +1,6 @@
 package graphics.scenery.backends.vulkan
 
 import cleargl.GLVector
-import org.lwjgl.system.MemoryUtil
-import org.lwjgl.vulkan.*
-import org.lwjgl.vulkan.VK10.*
 import graphics.scenery.GeometryType
 import graphics.scenery.Node
 import graphics.scenery.Settings
@@ -11,7 +8,10 @@ import graphics.scenery.backends.RenderConfigReader
 import graphics.scenery.backends.Renderer
 import graphics.scenery.utils.LazyLogger
 import graphics.scenery.utils.RingBuffer
+import org.lwjgl.system.MemoryUtil
 import org.lwjgl.system.MemoryUtil.*
+import org.lwjgl.vulkan.*
+import org.lwjgl.vulkan.VK10.*
 import java.nio.IntBuffer
 import java.nio.LongBuffer
 import java.util.*
@@ -120,7 +120,13 @@ open class VulkanRenderpass(val name: String, config: RenderConfigReader.RenderC
 
         val dslObjectTextures = VU.createDescriptorSetLayout(
             device,
-            listOf(Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6),
+            listOf(
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
                 Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)),
             binding = 0, shaderStages = VK_SHADER_STAGE_ALL)
 
@@ -364,7 +370,13 @@ open class VulkanRenderpass(val name: String, config: RenderConfigReader.RenderC
             spec.name == "VRParameters" ||
             spec.name == "MaterialProperties" -> listOf(Pair(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1))
 
-            spec.name == "ObjectTextures" -> listOf(Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6),
+            spec.name == "ObjectTextures" -> listOf(
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
                 Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1))
 
             spec.name.startsWith("Input") -> (0..spec.members.size-1).map { Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1) }.toList()

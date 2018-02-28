@@ -1,10 +1,10 @@
 package graphics.scenery.backends.vulkan
 
+import graphics.scenery.GeometryType
+import graphics.scenery.utils.LazyLogger
 import org.lwjgl.system.MemoryUtil.*
 import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.VK10.*
-import graphics.scenery.GeometryType
-import graphics.scenery.utils.LazyLogger
 import java.nio.IntBuffer
 import java.util.*
 
@@ -198,7 +198,7 @@ class VulkanPipeline(val device: VulkanDevice, val pipelineCache: Long? = null):
 
     fun GeometryType.asVulkanTopology(): Int {
         return when(this) {
-            GeometryType.TRIANGLE_FAN -> VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN
+//            GeometryType.TRIANGLE_FAN -> VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN
             GeometryType.TRIANGLES -> VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
             GeometryType.LINE -> VK_PRIMITIVE_TOPOLOGY_LINE_LIST
             GeometryType.POINTS -> VK_PRIMITIVE_TOPOLOGY_POINT_LIST

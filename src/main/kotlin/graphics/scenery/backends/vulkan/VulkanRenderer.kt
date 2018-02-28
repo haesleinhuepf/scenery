@@ -19,9 +19,7 @@ import org.lwjgl.glfw.GLFWVulkan.glfwVulkanSupported
 import org.lwjgl.system.Configuration
 import org.lwjgl.system.MemoryStack.stackPush
 import org.lwjgl.system.MemoryUtil.*
-import org.lwjgl.system.jemalloc.JEmalloc.je_calloc
-import org.lwjgl.system.jemalloc.JEmalloc.je_free
-import org.lwjgl.system.jemalloc.JEmalloc.je_malloc
+import org.lwjgl.system.jemalloc.JEmalloc.*
 import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.EXTDebugReport.*
 import org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
@@ -1089,7 +1087,12 @@ open class VulkanRenderer(hub: Hub,
         m.put("ObjectTextures", VU.createDescriptorSetLayout(
             device,
             listOf(
-                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+                Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
                 Pair(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)),
             0,
             VK_SHADER_STAGE_ALL))
@@ -2798,7 +2801,7 @@ open class VulkanRenderer(hub: Hub,
 
         buffers["LightParametersBuffer"]!!.reset()
 
-        // val lights = sceneObjects.await().filter { node -> node is PointLight }
+         val lights = scene.discover(scene, {it is Node}).filter { node -> node is PointLight }
 
         val lightUbo = VulkanUBO(device, backingBuffer = buffers["LightParametersBuffer"]!!)
         lightUbo.add("ViewMatrix", { cam.view })
@@ -2806,7 +2809,7 @@ open class VulkanRenderer(hub: Hub,
         lightUbo.add("ProjectionMatrix", { cam.projection.applyVulkanCoordinateSystem() })
         lightUbo.add("InverseProjectionMatrix", { cam.projection.applyVulkanCoordinateSystem().inverse })
         lightUbo.add("CamPosition", { cam.position })
-        /*lightUbo.add("numLights", { lights.size })
+        lightUbo.add("numLights", { lights.size })
 
         lights.forEachIndexed { i, light ->
             val l = light as PointLight
@@ -2820,7 +2823,7 @@ open class VulkanRenderer(hub: Hub,
             lightUbo.add("Position-$i", { l.position })
             lightUbo.add("Color-$i", { l.emissionColor })
             lightUbo.add("filler-$i", { 0.0f })
-        }*/
+        }
 
         lightUbo.createUniformBuffer()
         lightUbo.populate()

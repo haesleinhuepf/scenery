@@ -62,6 +62,17 @@ open class VulkanSwapchain(open val device: VulkanDevice,
             surface = VU.getLong("glfwCreateWindowSurface",
                 { GLFWVulkan.glfwCreateWindowSurface(device.instance, window, null, this) }, {})
 
+            /*
+            val s = VkMacOSSurfaceCreateInfoMVK.calloc()
+                .sType(VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK)
+                .pNext(0)
+                .flags(0)
+                .pView(surface)
+
+            VU.getLong("osx surface create", { vkCreateMacOSSurfaceMVK(device.instance,
+                s, null, this)}, {})
+                */
+
             // Handle canvas resize
             windowSizeCallback = object : GLFWWindowSizeCallback() {
                 override operator fun invoke(glfwWindow: Long, w: Int, h: Int) {

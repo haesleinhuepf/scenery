@@ -673,7 +673,7 @@ class OpenGLRenderer(hub: Hub,
             GeometryType.TRIANGLE_STRIP -> GL4.GL_TRIANGLE_STRIP
             GeometryType.POLYGON -> GL4.GL_TRIANGLES
             GeometryType.TRIANGLES -> GL4.GL_TRIANGLES
-            GeometryType.TRIANGLE_FAN -> GL4.GL_TRIANGLE_FAN
+//            GeometryType.TRIANGLE_FAN -> GL4.GL_TRIANGLE_FAN
             GeometryType.POINTS -> GL4.GL_POINTS
             GeometryType.LINE -> GL4.GL_LINE_STRIP
             GeometryType.LINES_ADJACENCY -> GL4.GL_LINES_ADJACENCY

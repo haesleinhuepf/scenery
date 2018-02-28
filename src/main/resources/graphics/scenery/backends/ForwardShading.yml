@@ -3,10 +3,10 @@ description: Forward Shading Pipeline, with HDR postprocessing
 
 rendertargets:
   HDR:
-    HDRBuffer:
+    Color:
       size: 1.0, 1.0
       format: RGBA_Float32
-    ZBuffer:
+    Depth:
       size: 1.0, 1.0
       format: Depth32
 
@@ -17,7 +17,7 @@ renderpasses:
       - "Default.vert.spv"
       - "Default.frag.spv"
     output: HDR
-  PostprocessHDR:
+  HDR:
     type: quad
     shaders:
       - "FullscreenQuad.vert.spv"
@@ -26,5 +26,7 @@ renderpasses:
       - HDR
     output: Viewport
     parameters:
-      Gamma: 1.7
-      Exposure: 1.5
+      TonemappingOperator: 0
+      Gamma: 2.2
+      Exposure: 10.0
+      WhitePoint: 11.2

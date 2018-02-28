@@ -1,9 +1,12 @@
 package graphics.scenery.backends.vulkan
 
-import org.lwjgl.system.MemoryUtil.*
-import org.lwjgl.vulkan.*
 import graphics.scenery.NodeMetadata
 import graphics.scenery.utils.LazyLogger
+import org.lwjgl.system.MemoryUtil.*
+import org.lwjgl.vulkan.VK10
+import org.lwjgl.vulkan.VkDescriptorImageInfo
+import org.lwjgl.vulkan.VkDescriptorSetAllocateInfo
+import org.lwjgl.vulkan.VkWriteDescriptorSet
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -73,8 +76,8 @@ open class VulkanObjectState : NodeMetadata {
                 .sType(VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
                 .pNext(NULL)
                 .dstSet(descriptorSet)
-                .dstBinding(if(type.contains("3D")) { targetBinding+1 } else { targetBinding })
-                .dstArrayElement(textureTypeToSlot(type))
+                .dstBinding(textureTypeToSlot(type))
+                .dstArrayElement(0)
                 .pImageInfo(d[i])
                 .descriptorType(VK10.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
 
@@ -101,7 +104,7 @@ open class VulkanObjectState : NodeMetadata {
                 "normal" -> 3
                 "alphamask" -> 4
                 "displacement" -> 5
-                "3D-volume" -> 0
+                "3D-volume" -> 6
                 else -> { logger.warn("Unknown texture type: $type"); 0 }
             }
         }

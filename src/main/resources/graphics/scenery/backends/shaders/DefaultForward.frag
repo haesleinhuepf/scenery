@@ -47,7 +47,12 @@ layout(set = 3, binding = 0) uniform MaterialProperties {
     MaterialInfo Material;
 };
 
-layout(set = 4, binding = 0) uniform sampler2D ObjectTextures[NUM_OBJECT_TEXTURES];
+layout(set = 4, binding = 0) uniform sampler2D ObjectTexturesAmbient;
+layout(set = 4, binding = 1) uniform sampler2D ObjectTexturesDiffuse;
+layout(set = 4, binding = 2) uniform sampler2D ObjectTexturesSpecular;
+layout(set = 4, binding = 3) uniform sampler2D ObjectTexturesNormal;
+layout(set = 4, binding = 4) uniform sampler2D ObjectTexturesAlpha;
+layout(set = 4, binding = 5) uniform sampler2D ObjectTexturesDisplacement;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -62,15 +67,15 @@ void main()
         }
 
         if((materialType & MATERIAL_HAS_DIFFUSE) == MATERIAL_HAS_DIFFUSE) {
-            diffuse = texture(ObjectTextures[1], Vertex.TexCoord).rgb;
+            diffuse = texture(ObjectTexturesDiffuse, Vertex.TexCoord).rgb;
         }
 
         if((materialType & MATERIAL_HAS_SPECULAR) == MATERIAL_HAS_SPECULAR) {
-            specular = texture(ObjectTextures[2], Vertex.TexCoord).r;
+            specular = texture(ObjectTexturesSpecular, Vertex.TexCoord).r;
         }
 
         if((materialType & MATERIAL_HAS_ALPHAMASK) == MATERIAL_HAS_ALPHAMASK) {
-            if(texture(ObjectTextures[4], Vertex.TexCoord).r < 0.1f) {
+            if(texture(ObjectTexturesAlpha, Vertex.TexCoord).r < 0.1f) {
                 discard;
             }
         }

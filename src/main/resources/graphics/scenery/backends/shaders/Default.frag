@@ -32,15 +32,17 @@ const int MAX_NUM_LIGHTS = 1024;
 
 layout(set = 1, binding = 0) uniform LightParameters {
     mat4 ViewMatrix;
+    mat4 InverseViewMatrix;
+    mat4 ProjectionMatrix;
+    mat4 InverseProjectionMatrix;
     vec3 CamPosition;
     int numLights;
-	Light lights[MAX_NUM_LIGHTS];
+    Light lights[MAX_NUM_LIGHTS];
 };
 
 layout(set = 2, binding = 0) uniform Matrices {
 	mat4 ModelMatrix;
 	mat4 NormalMatrix;
-	mat4 ProjectionMatrix;
 	int isBillboard;
 } ubo;
 
@@ -49,7 +51,12 @@ layout(set = 3, binding = 0) uniform MaterialProperties {
     MaterialInfo Material;
 };
 
-layout(set = 4, binding = 0) uniform sampler2D ObjectTextures[NUM_OBJECT_TEXTURES];
+//layout(set = 4, binding = 0) uniform sampler2D ObjectTexturesAmbient;
+layout(set = 4, binding = 1) uniform sampler2D ObjectTexturesDiffuse;
+layout(set = 4, binding = 2) uniform sampler2D ObjectTexturesSpecular;
+layout(set = 4, binding = 3) uniform sampler2D ObjectTexturesNormal;
+layout(set = 4, binding = 4) uniform sampler2D ObjectTexturesAlpha;
+layout(set = 4, binding = 5) uniform sampler2D ObjectTexturesDisplacement;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -92,9 +99,10 @@ vec4 BlinnPhong(vec3 FragPos, vec3 viewPos, vec3 Normal, vec3 a, vec3 d, vec3 s)
 }
 
 void main() {
-    vec3 ambient = texture(ObjectTextures[0], Vertex.TexCoord).rgb;
-    vec3 diffuse = texture(ObjectTextures[1], Vertex.TexCoord).rgb;
-    vec3 specular = texture(ObjectTextures[2], Vertex.TexCoord).rgb;
+//    vec3 ambient = texture(ObjectTexturesAmbient, Vertex.TexCoord).rgb;
+    vec3 ambient = vec3(0.0f);
+    vec3 diffuse = texture(ObjectTexturesDiffuse, Vertex.TexCoord).rgb;
+    vec3 specular = texture(ObjectTexturesSpecular, Vertex.TexCoord).rgb;
 
     FragColor = BlinnPhong(Vertex.FragPosition, CamPosition, Vertex.Normal,
         ambient, diffuse, specular);
