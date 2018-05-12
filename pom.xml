@@ -517,6 +517,12 @@
             <version>2c3593c914</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.github.kotlin-graphics</groupId>
+            <artifactId>glm</artifactId>
+            <version>738c60621c</version>
+        </dependency>
+
     </dependencies>
 
     <repositories>

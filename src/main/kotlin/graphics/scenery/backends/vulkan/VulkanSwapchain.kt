@@ -28,6 +28,7 @@ open class VulkanSwapchain(open val device: VulkanDevice,
                            open val commandPool: Long,
                            @Suppress("unused") open val renderConfig: RenderConfigReader.RenderConfig,
                            open val useSRGB: Boolean = true) : Swapchain {
+
     protected val logger by LazyLogger()
 
     override var handle: Long = 0L

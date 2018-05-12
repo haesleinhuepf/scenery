@@ -24,6 +24,7 @@ import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.EXTDebugReport.*
 import org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 import org.lwjgl.vulkan.VK10.*
+import vkk.appBuffer
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferByte
 import java.io.File
@@ -1677,6 +1678,9 @@ open class VulkanRenderer(hub: Hub,
      * This function renders the scene
      */
     override fun render() {
+
+        appBuffer.reset()
+
         pollEvents()
 
         val stats = hub?.get(SceneryElement.Statistics) as? Statistics
@@ -2931,6 +2935,7 @@ open class VulkanRenderer(hub: Hub,
 
     override fun reshape(newWidth: Int, newHeight: Int) {
 
+        appBuffer.reset()
     }
 
     @Suppress("UNUSED")
