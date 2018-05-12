@@ -6,6 +6,7 @@ import org.lwjgl.system.MemoryUtil
 import org.lwjgl.system.MemoryUtil.memUTF8
 import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.VK10.*
+import vkk.VkMemoryPropertyFlags
 import java.util.ArrayList
 
 class VulkanDevice(val instance: VkInstance, val physicalDevice: VkPhysicalDevice, val deviceData: DeviceData, extensionsQuery: (VkPhysicalDevice) -> Array<String> = { arrayOf() }, validationLayers: Array<String> = arrayOf()) {
@@ -120,7 +121,7 @@ class VulkanDevice(val instance: VkInstance, val physicalDevice: VkPhysicalDevic
         logger.debug("Created logical Vulkan device on ${deviceData.vendor} ${deviceData.name}")
     }
 
-    fun getMemoryType(typeBits: Int, flags: Int): List<Int> {
+    fun getMemoryType(typeBits: Int, flags: VkMemoryPropertyFlags): List<Int> {
         var bits = typeBits
         val types = ArrayList<Int>(5)
 
