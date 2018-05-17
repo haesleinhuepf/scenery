@@ -133,7 +133,7 @@ scenery has been tested with a number of different systems and GPUs. If you have
 |:--|:--|:--|:--|:--|:--|
 | AMD Radeon R5 M230 (Caicos Pro) | ⛔ | ✅ | ⬜ | ⬜ | ⬜ |
 | AMD Radeon R9 390 (Hawaii Pro) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
-| AMD Radeon R9 Nano (Fiji XT) | ⛔ | ⛔ | ⬜ | ⬜ | ⬜ |
+| AMD Radeon R9 Nano (Fiji XT) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
 | AMD Radeon R9 M370X (Strato Pro) | ⬜ | ⬜ | ⬜ | ⬜ | ✅ |
 | AMD FirePro W9100 (Hawaii XT) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
 | Intel HD Graphics 4400 (Haswell) | ✅ | 🚫 | ✅ | ✅ | ⬜ |
@@ -144,6 +144,7 @@ scenery has been tested with a number of different systems and GPUs. If you have
 | Nvidia Geforce 1070 (Pascal) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Nvidia Geforce 960 (Maxwell) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
 | Nvidia Quadro K6000 (Kepler) | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Nvidia Quadro P5000 (Pascal) | ⬜ | ⬜ | ✅ | ⬜ | ⬜ |
 | Nvidia Geforce 750M (Kepler) | ✅  | ✅  | ⬜ | ⬜ | ✅  |
 | Nvidia Geforce 650M (Kepler) | ⬜  | ⬜  | ⬜ | ⬜ | ✅  |
 
