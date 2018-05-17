@@ -1,5 +1,6 @@
 package graphics.scenery.backends.vulkan
 
+import glm_.L
 import glm_.buffer.bufferBig
 import glm_.i
 import graphics.scenery.utils.LazyLogger
@@ -20,14 +21,12 @@ class VulkanBuffer(
 
     protected val logger by LazyLogger()
     private var currentPosition = 0L
-    private var currentPointer: PointerBuffer? = null
+    private var currentPointer = NULL
     var alignment: VkDeviceSize = 256
         private set
     var memory: VkDeviceMemory = NULL
         private set
     var vulkanBuffer: VkBuffer = NULL
-        private set
-    var data: Long = -1L
         private set
     var allocatedSize: VkDeviceSize = 0
         private set
@@ -64,12 +63,11 @@ class VulkanBuffer(
     }
 
     fun getPointerBuffer(size: Int): ByteBuffer {
-        if (currentPointer == null) {
-            this.map()
-        }
+        if (currentPointer == NULL)
+            map()
 
-        val buffer = memByteBuffer(currentPointer!!.get(0) + currentPosition, size)
-        currentPosition += size * 1L
+        val buffer = memByteBuffer(currentPointer + currentPosition, size)
+        currentPosition += size.L
 
         return buffer
     }
@@ -116,23 +114,20 @@ class VulkanBuffer(
         memFree(src)
     }
 
-    fun map(): PointerBuffer {
-        val dest = memAllocPointer(1)
-        vkMapMemory(device.vulkanDevice, memory, 0, size, 0, dest)
+    fun map(): Long {
+        val dest = device.vulkanDevice.mapMemory(memory, 0, size)
 
         currentPointer = dest
         mapped = true
         return dest
     }
 
+    // TODO check, it always maps
     fun mapIfUnmapped(): PointerBuffer {
-        currentPointer?.let {
-            if (mapped) {
-                return it.rewind()
-            }
-        }
+        if(currentPointer == NULL)
+            currentPointer = map()
 
-        return map()
+        return memAllocPointer(1).apply { put(0, currentPointer) }
     }
 
     fun unmap() {

@@ -514,13 +514,13 @@
         <dependency>
             <groupId>com.github.kotlin-graphics</groupId>
             <artifactId>vkk</artifactId>
-            <version>2c3593c914</version>
+            <version>d74b465bcaa63acf1f4f09a02f1ad6da783404e5</version>
         </dependency>
 
         <dependency>
             <groupId>com.github.kotlin-graphics</groupId>
             <artifactId>glm</artifactId>
-            <version>738c60621c</version>
+            <version>86ecfc812ba39da9dd62ec4e69c658b2111567bb</version>
         </dependency>
 
     </dependencies>
