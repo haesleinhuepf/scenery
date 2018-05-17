@@ -294,7 +294,7 @@ open class VulkanRenderer(hub: Hub,
     protected var validation = java.lang.Boolean.parseBoolean(System.getProperty("scenery.VulkanRenderer.EnableValidations", "false"))
     protected val strictValidation = java.lang.Boolean.parseBoolean(System.getProperty("scenery.VulkanRenderer.StrictValidation", "false"))
     protected val wantsOpenGLSwapchain = java.lang.Boolean.parseBoolean(System.getProperty("scenery.VulkanRenderer.UseOpenGLSwapchain", "false"))
-    protected val defaultValidationLayers = arrayOf("VK_LAYER_LUNARG_standard_validation")
+    protected val defaultValidationLayers = listOf("VK_LAYER_LUNARG_standard_validation")
 
     protected var instance: VkInstance
     protected var device: VulkanDevice
@@ -424,17 +424,17 @@ open class VulkanRenderer(hub: Hub,
         val requestedValidationLayers = if(validation) {
             if(wantsOpenGLSwapchain) {
                 logger.warn("Requested OpenGL swapchain, validation layers disabled.")
-                emptyArray()
+                emptyList()
             } else {
                 defaultValidationLayers
             }
         } else {
-            emptyArray()
+            emptyList()
         }
 
         device = VulkanDevice.fromPhysicalDevice(instance,
             physicalDeviceFilter = { _, device -> device.name.contains(System.getProperty("scenery.Renderer.Device", "DOES_NOT_EXIST"))},
-            additionalExtensions = { physicalDevice -> hub.getWorkingHMDDisplay()?.getVulkanDeviceExtensions(physicalDevice)?.toTypedArray() ?: arrayOf() },
+            additionalExtensions = { physicalDevice -> hub.getWorkingHMDDisplay()?.getVulkanDeviceExtensions(physicalDevice)?.toList() ?: listOf() },
             validationLayers = requestedValidationLayers)
 
         logger.debug("Device creation done")
