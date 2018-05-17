@@ -1,13 +1,13 @@
 package graphics.scenery.backends.vulkan
 
 import glm_.L
+import glm_.buffer.adr
 import glm_.buffer.bufferBig
+import glm_.buffer.free
+import glm_.buffer.pos
 import glm_.i
 import graphics.scenery.utils.LazyLogger
-import org.lwjgl.PointerBuffer
-import org.lwjgl.system.MemoryUtil
 import org.lwjgl.system.MemoryUtil.*
-import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.VK10.*
 import vkk.*
 import java.nio.ByteBuffer
@@ -20,7 +20,7 @@ class VulkanBuffer(
     wantAligned: Boolean = true) : AutoCloseable {
 
     protected val logger by LazyLogger()
-    private var currentPosition = 0L
+    private var currentPosition = NULL
     private var currentPointer = NULL
     var alignment: VkDeviceSize = 256
         private set
@@ -62,6 +62,7 @@ class VulkanBuffer(
         device.vulkanDevice.bindBufferMemory(vulkanBuffer, memory)
     }
 
+    // TODO unused
     fun getPointerBuffer(size: Int): ByteBuffer {
         if (currentPointer == NULL)
             map()
@@ -73,45 +74,41 @@ class VulkanBuffer(
     }
 
     fun getCurrentOffset(): Int {
-        if (currentPosition.rem(alignment) != 0L) {
-            currentPosition += alignment - currentPosition.rem(alignment)
-            stagingBuffer.position(currentPosition.toInt())
+        if (currentPosition % alignment != 0L) {
+            currentPosition += alignment - (currentPosition % alignment)
+            stagingBuffer.pos = currentPosition.i
         }
-        return currentPosition.toInt()
+        return currentPosition.i
     }
 
-    fun advance(align: Long = this.alignment): Int {
-        val pos = stagingBuffer.position()
-        val rem = pos.rem(align)
+    fun advance(align: Long = alignment): Int {
+        val pos = stagingBuffer.pos
+        val rem = pos % align
 
         if (rem != 0L) {
-            val newpos = pos + align.toInt() - rem.toInt()
-            stagingBuffer.position(newpos)
+            val newPos = pos + align.i - rem.i
+            stagingBuffer.pos = newPos
         }
 
-        return stagingBuffer.position()
+        return stagingBuffer.pos
     }
 
     fun reset() {
-        stagingBuffer.position(0)
-        stagingBuffer.limit(size.toInt())
-        currentPosition = 0L
+        stagingBuffer.pos = 0
+        stagingBuffer.limit(size.i)
+        currentPosition = NULL
     }
 
     fun copyFrom(data: ByteBuffer) {
-        val dest = memAllocPointer(1)
-        vkMapMemory(device.vulkanDevice, memory, 0, size, 0, dest)
-        memCopy(memAddress(data), dest.get(0), data.remaining().toLong())
-        vkUnmapMemory(device.vulkanDevice, memory)
-        memFree(dest)
+        device.vulkanDevice.mappingMemory(memory, 0, size) { dest ->
+            memCopy(data.adr, dest, data.remaining().L)
+        }
     }
 
     fun copyTo(dest: ByteBuffer) {
-        val src = memAllocPointer(1)
-        vkMapMemory(device.vulkanDevice, memory, 0, size, 0, src)
-        memCopy(src.get(0), memAddress(dest), dest.remaining().toLong())
-        vkUnmapMemory(device.vulkanDevice, memory)
-        memFree(src)
+        device.vulkanDevice.mappingMemory(memory, 0, size) {src ->
+            memCopy(src, dest.adr, dest.remaining().L)
+        }
     }
 
     fun map(): Long {
@@ -122,17 +119,16 @@ class VulkanBuffer(
         return dest
     }
 
-    // TODO check, it always maps
-    fun mapIfUnmapped(): PointerBuffer {
-        if(currentPointer == NULL)
+    fun mapIfUnmapped(): Long {
+        if (currentPointer == NULL)
             currentPointer = map()
 
-        return memAllocPointer(1).apply { put(0, currentPointer) }
+        return currentPointer
     }
 
     fun unmap() {
         mapped = false
-        vkUnmapMemory(device.vulkanDevice, memory)
+        device.vulkanDevice.unmapMemory(memory)
     }
 
     fun copyFromStagingBuffer() {
@@ -148,15 +144,15 @@ class VulkanBuffer(
         if (mapped)
             unmap()
 
-        memFree(stagingBuffer)
+        stagingBuffer.free()
 
         if (memory != NULL) {
-            vkFreeMemory(device.vulkanDevice, memory, null)
+            device.vulkanDevice.freeMemory(memory)
             memory = NULL
         }
 
         if (vulkanBuffer != NULL) {
-            vkDestroyBuffer(device.vulkanDevice, vulkanBuffer, null)
+            device.vulkanDevice.destroyBuffer(vulkanBuffer)
             vulkanBuffer = NULL
         }
     }

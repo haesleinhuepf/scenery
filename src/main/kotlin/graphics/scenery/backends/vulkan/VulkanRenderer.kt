@@ -2,6 +2,7 @@ package graphics.scenery.backends.vulkan
 
 import cleargl.GLMatrix
 import cleargl.GLVector
+import glm_.i
 import graphics.scenery.*
 import graphics.scenery.backends.*
 import graphics.scenery.spirvcrossj.Loader
@@ -1646,7 +1647,7 @@ open class VulkanRenderer(hub: Hub,
                 }
 
                 if(recordMovie) {
-                    encoder?.encodeFrame(sb.mapIfUnmapped().getByteBuffer(imageByteSize.toInt()))
+                    encoder?.encodeFrame(memByteBuffer(sb.mapIfUnmapped(), imageByteSize.i))
                 }
 
                 if(screenshotRequested && !recordMovie) {

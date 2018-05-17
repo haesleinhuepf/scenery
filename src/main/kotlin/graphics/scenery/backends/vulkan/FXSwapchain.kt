@@ -23,6 +23,7 @@ import javafx.scene.control.Label
 import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.scene.text.TextAlignment
+import org.lwjgl.system.MemoryUtil.memByteBuffer
 import java.util.concurrent.locks.ReentrantLock
 
 
@@ -289,7 +290,7 @@ class FXSwapchain(device: VulkanDevice,
         Platform.runLater {
             if (lock.tryLock() && !vulkanSwapchainRecreator.mustRecreate && sharingBuffer.initialized()) {
                 val imageByteSize = window.width * window.height * 4
-                val buffer = sharingBuffer.mapIfUnmapped().getByteBuffer(imageByteSize)
+                val buffer = memByteBuffer(sharingBuffer.mapIfUnmapped(), imageByteSize)
 
                 imagePanel?.update(buffer)
 
