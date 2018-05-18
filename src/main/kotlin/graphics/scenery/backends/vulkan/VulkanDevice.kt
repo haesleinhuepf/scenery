@@ -21,7 +21,7 @@ class VulkanDevice(
     val extensions = ArrayList<String>()
 
     enum class DeviceType { Unknown, Other, IntegratedGPU, DiscreteGPU, VirtualGPU, CPU }
-    data class DeviceData(val vendor: String, val name: String, val driverVersion: String, val apiVersion: String, val type: DeviceType)
+    data class DeviceData(val vendor: String, val name: String, val driverVersion: String, val apiVersion: String, val type: VkPhysicalDeviceType)
     data class QueueIndices(val presentQueue: Int, val graphicsQueue: Int, val computeQueue: Int)
 
     init {
@@ -93,7 +93,7 @@ class VulkanDevice(
         for (i in 0 until memoryProperties.memoryTypeCount()) {
             if (bits and 1 == 1) {
                 if ((memoryProperties.memoryTypes(i).propertyFlags() and flags) == flags) {
-                    types.add(i)
+                    types += i
                 }
             }
 
@@ -101,33 +101,22 @@ class VulkanDevice(
         }
 
         if (types.isEmpty()) {
-            logger.warn("Memory type $flags not found for device $this (${vulkanDevice.address().toHexString()}")
+            logger.warn("Memory type $flags not found for device $this (${vulkanDevice.adr.toHexString()}")
         }
 
         return types
     }
 
-    fun createCommandPool(queueNodeIndex: Int): Long {
-        return stackPush().use { stack ->
-            val cmdPoolInfo = VkCommandPoolCreateInfo.callocStack(stack)
-                .sType(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO)
-                .queueFamilyIndex(queueNodeIndex)
-                .flags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-
-            val pCmdPool = stack.callocLong(1)
-            val err = vkCreateCommandPool(vulkanDevice, cmdPoolInfo, null, pCmdPool)
-            val commandPool = pCmdPool.get(0)
-
-            if (err != VK_SUCCESS) {
-                throw RuntimeException("Failed to create command pool: " + VU.translate(err))
-            }
-
-            commandPool
+    fun createCommandPool(queueNodeIndex: Int): VkCommandPool {
+        val cmdPoolInfo = vk.CommandPoolCreateInfo {
+            queueFamilyIndex = queueNodeIndex
+            flags = VkCommandPoolCreate.RESET_COMMAND_BUFFER_BIT.i
         }
+        return vulkanDevice.createCommandPool(cmdPoolInfo)
     }
 
-    fun destroyCommandPool(commandPool: Long) {
-        vkDestroyCommandPool(vulkanDevice, commandPool, null)
+    fun destroyCommandPool(commandPool: VkCommandPool) {
+        vulkanDevice.destroyCommandPool(commandPool)
     }
 
     override fun toString(): String {
@@ -136,8 +125,8 @@ class VulkanDevice(
 
     fun close() {
         logger.debug("Closing device ${deviceData.vendor} ${deviceData.name}...")
-        vkDeviceWaitIdle(vulkanDevice)
-        vkDestroyDevice(vulkanDevice, null)
+        vulkanDevice.waitIdle()
+        vulkanDevice.destroy()
         logger.debug("Device closed.")
 
         memoryProperties.free()
@@ -164,106 +153,65 @@ class VulkanDevice(
             }
         )
 
-        private fun toDeviceType(vkDeviceType: Int): DeviceType {
-            return when (vkDeviceType) {
-                0 -> DeviceType.Other
-                1 -> DeviceType.IntegratedGPU
-                2 -> DeviceType.DiscreteGPU
-                3 -> DeviceType.VirtualGPU
-                4 -> DeviceType.CPU
-                else -> DeviceType.Unknown
-            }
-        }
-
-        private fun vendorToString(vendor: Int): String =
-            when (vendor) {
-                0x1002 -> "AMD"
-                0x10DE -> "Nvidia"
-                0x8086 -> "Intel"
-                else -> "(Unknown vendor)"
-            }
-
-        private fun decodeDriverVersion(version: Int) =
-            Triple(
-                version and 0xFFC00000.toInt() shr 22,
-                version and 0x003FF000 shr 12,
-                version and 0x00000FFF
-            )
-
-        private fun driverVersionToString(version: Int) =
-            decodeDriverVersion(version).toList().joinToString(".")
-
         @JvmStatic
         fun fromPhysicalDevice(instance: VkInstance, physicalDeviceFilter: (Int, DeviceData) -> Boolean,
                                additionalExtensions: (VkPhysicalDevice) -> List<String> = { listOf() },
                                validationLayers: List<String> = listOf()): VulkanDevice {
-            return stackPush().use { stack ->
 
-                val physicalDeviceCount = VU.getInt("Enumerate physical devices",
-                    { vkEnumeratePhysicalDevices(instance, this, null) })
+            val physicalDevices = instance.enumeratePhysicalDevices()
 
-                if (physicalDeviceCount < 1) {
-                    throw RuntimeException("No Vulkan-compatible devices found!")
+            var devicePreference = 0
+
+            logger.info("Physical devices: ")
+            val properties = vk.PhysicalDeviceProperties()
+            val deviceList = ArrayList<DeviceData>(10)
+
+            for (i in physicalDevices.indices) {
+
+                val device = physicalDevices[i]
+
+                vkGetPhysicalDeviceProperties(device, properties)
+
+                val deviceData = DeviceData(
+                    vendor = properties.vendorName,
+                    name = properties.deviceName,
+                    driverVersion = properties.driverVersionString,
+                    apiVersion = properties.apiVersionString,
+                    type = properties.deviceType)
+
+                if (physicalDeviceFilter(i, deviceData)) {
+                    devicePreference = i
                 }
 
-                val physicalDevices = VU.getPointers("Getting Vulkan physical devices", physicalDeviceCount,
-                    { vkEnumeratePhysicalDevices(instance, intArrayOf(physicalDeviceCount), this) })
-
-                var devicePreference = 0
-
-                logger.info("Physical devices: ")
-                val properties: VkPhysicalDeviceProperties = VkPhysicalDeviceProperties.callocStack(stack)
-                val deviceList = ArrayList<DeviceData>(10)
-
-                for (i in 0 until physicalDeviceCount) {
-                    val device = VkPhysicalDevice(physicalDevices.get(i), instance)
-
-                    vkGetPhysicalDeviceProperties(device, properties)
-
-                    val deviceData = DeviceData(
-                        vendor = vendorToString(properties.vendorID()),
-                        name = properties.deviceNameString(),
-                        driverVersion = driverVersionToString(properties.driverVersion()),
-                        apiVersion = driverVersionToString(properties.apiVersion()),
-                        type = toDeviceType(properties.deviceType()))
-
-                    if (physicalDeviceFilter.invoke(i, deviceData)) {
-                        devicePreference = i
-                    }
-
-                    deviceList.add(deviceData)
-                }
-
-                deviceList.forEachIndexed { i, device ->
-                    val selected = if (devicePreference == i) {
-                        "(selected)"
-                    } else {
-                        ""
-                    }
-
-                    logger.info("  $i: ${device.vendor} ${device.name} (${device.type}, driver version ${device.driverVersion}, Vulkan API ${device.apiVersion}) $selected")
-                }
-
-                val selectedDevice = physicalDevices.get(devicePreference)
-                val selectedDeviceData = deviceList[devicePreference]
-
-                if (System.getProperty("scenery.DisableDeviceWorkarounds", "false")?.toBoolean() != true) {
-                    deviceWorkarounds.forEach {
-                        if (it.filter.invoke(selectedDeviceData)) {
-                            logger.warn("Workaround activated: ${it.description}")
-                            it.workaround.invoke(selectedDeviceData)
-                        }
-                    }
-                } else {
-                    logger.warn("Device-specific workarounds disabled upon request, expect weird things to happen.")
-                }
-
-                val physicalDevice = VkPhysicalDevice(selectedDevice, instance)
-
-                physicalDevices.free()
-
-                VulkanDevice(instance, physicalDevice, selectedDeviceData, additionalExtensions, validationLayers)
+                deviceList += deviceData
             }
+
+            deviceList.forEachIndexed { i, device ->
+                val selected = when (devicePreference) {
+                    i -> "(selected)"
+                    else -> ""
+                }
+
+                logger.info("  $i: ${device.vendor} ${device.name} (${device.type}, driver version ${device.driverVersion}, Vulkan API ${device.apiVersion}) $selected")
+            }
+
+            val selectedDevice = physicalDevices[devicePreference]
+            val selectedDeviceData = deviceList[devicePreference]
+
+            if (System.getProperty("scenery.DisableDeviceWorkarounds", "false")?.toBoolean() != true) {
+                deviceWorkarounds.forEach {
+                    if ((it.filter)(selectedDeviceData)) {
+                        logger.warn("Workaround activated: ${it.description}")
+                        (it.workaround)(selectedDeviceData)
+                    }
+                }
+            } else {
+                logger.warn("Device-specific workarounds disabled upon request, expect weird things to happen.")
+            }
+
+            val physicalDevice = selectedDevice
+
+            return VulkanDevice(instance, physicalDevice, selectedDeviceData, additionalExtensions, validationLayers)
         }
     }
 }

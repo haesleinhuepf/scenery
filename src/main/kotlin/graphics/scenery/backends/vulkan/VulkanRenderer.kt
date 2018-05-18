@@ -23,6 +23,7 @@ import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.EXTDebugReport.*
 import org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 import org.lwjgl.vulkan.VK10.*
+import vkk.VkCommandPool
 import vkk.appBuffer
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferByte
@@ -99,9 +100,9 @@ open class VulkanRenderer(hub: Hub,
     )
 
     data class CommandPools(
-        var Standard: Long = -1L,
-        var Render: Long = -1L,
-        var Compute: Long = -1L
+        var Standard: VkCommandPool = -1L,
+        var Render: VkCommandPool = -1L,
+        var Compute: VkCommandPool = -1L
     )
 
     data class DeviceAndGraphicsQueueFamily(
