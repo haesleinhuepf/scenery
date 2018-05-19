@@ -4,6 +4,7 @@ import org.lwjgl.system.MemoryUtil.*
 import org.lwjgl.vulkan.*
 import graphics.scenery.NodeMetadata
 import graphics.scenery.utils.LazyLogger
+import vkk.*
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -26,7 +27,7 @@ open class VulkanObjectState : NodeMetadata {
 
     var vertexBuffers = ConcurrentHashMap<String, VulkanBuffer>()
 
-    var UBOs = LinkedHashMap<String, Pair<Long, VulkanUBO>>()
+    var UBOs = LinkedHashMap<String, Pair<VkDescriptorSet, VulkanUBO>>()
 
     var textures = ConcurrentHashMap<String, VulkanTexture>()
 
@@ -34,60 +35,46 @@ open class VulkanObjectState : NodeMetadata {
 
     var defaultTexturesFor = HashSet<String>()
 
-    var requiredDescriptorSets = HashMap<String, Long>()
+    var requiredDescriptorSets = HashMap<String, VkDescriptorSet>()
 
     var vertexInputType = VulkanRenderer.VertexDataKinds.PositionNormalTexcoord
-    var vertexDescription: VulkanRenderer.VertexDescription? = null
+    var vertexDescription: VulkanRenderer.VertexDescription? = null // TODO consider lateinit
 
-    var textureDescriptorSet: Long = -1L
+    var textureDescriptorSet: VkDescriptorSet = NULL
 
-    fun texturesToDescriptorSet(device: VulkanDevice, descriptorSetLayout: Long, descriptorPool: Long, targetBinding: Int = 0): Long {
-        val descriptorSet = if(textureDescriptorSet == -1L) {
-            val pDescriptorSetLayout = memAllocLong(1)
-            pDescriptorSetLayout.put(0, descriptorSetLayout)
-
-            val allocInfo = VkDescriptorSetAllocateInfo.calloc()
-                .sType(VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO)
-                .pNext(NULL)
-                .descriptorPool(descriptorPool)
-                .pSetLayouts(pDescriptorSetLayout)
-
-            VU.getLong("vkAllocateDescriptorSets",
-                { VK10.vkAllocateDescriptorSets(device.vulkanDevice, allocInfo, this) },
-                { allocInfo.free(); memFree(pDescriptorSetLayout) })
-        } else {
-            textureDescriptorSet
+    fun texturesToDescriptorSet(device: VulkanDevice, descriptorSetLayout: VkDescriptorSetLayout, descriptorPool: VkDescriptorPool, targetBinding: Int = 0): VkDescriptorSet {
+        if (textureDescriptorSet == NULL) {
+            val allocInfo = vk.DescriptorSetAllocateInfo(descriptorPool, descriptorSetLayout)
+            textureDescriptorSet = device.vulkanDevice.allocateDescriptorSets(allocInfo)
         }
 
-        val d = (1..textures.count()).map { VkDescriptorImageInfo.calloc(1) }.toTypedArray()
-        val wd = VkWriteDescriptorSet.calloc(textures.count())
+        val d = vk.DescriptorImageInfo(textures.size)
+        val wd = vk.WriteDescriptorSet(textures.size)
         var i = 0
 
         textures.forEach { type, texture ->
-            d[i]
-                .imageView(texture.image!!.view)
-                .sampler(texture.image!!.sampler)
-                .imageLayout(VK10.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-
-            wd[i]
-                .sType(VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
-                .pNext(NULL)
-                .dstSet(descriptorSet)
-                .dstBinding(if(type.contains("3D")) { targetBinding+1 } else { targetBinding })
-                .dstArrayElement(textureTypeToSlot(type))
-                .pImageInfo(d[i])
-                .descriptorType(VK10.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-
+            d[i].apply {
+                imageView = texture.image!!.view
+                sampler = texture.image!!.sampler
+                imageLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+            }
+            wd[i].apply {
+                dstSet = textureDescriptorSet
+                dstBinding = targetBinding + when {
+                    type.contains("3D") -> 1
+                    else -> 0
+                }
+                dstArrayElement = textureTypeToSlot(type)
+                imageInfo_ = d[i]
+                descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+            }
             i++
         }
 
-        VK10.vkUpdateDescriptorSets(device.vulkanDevice, wd, null)
-        wd.free()
-        d.forEach { it.free() }
+        device.vulkanDevice.updateDescriptorSets(wd)
 
-        logger.debug("Creating texture descriptor {} set with 1 bindings, DSL={}", descriptorSet.toHexString(), descriptorSetLayout.toHexString())
-        this.textureDescriptorSet = descriptorSet
-        return descriptorSet
+        logger.debug("Creating texture descriptor {} set with 1 bindings, DSL={}", textureDescriptorSet.toHexString(), descriptorSetLayout.toHexString())
+        return textureDescriptorSet
     }
 
     companion object {
@@ -102,7 +89,10 @@ open class VulkanObjectState : NodeMetadata {
                 "alphamask" -> 4
                 "displacement" -> 5
                 "3D-volume" -> 0
-                else -> { logger.warn("Unknown texture type: $type"); 0 }
+                else -> {
+                    logger.warn("Unknown texture type: $type")
+                    0
+                }
             }
         }
     }
