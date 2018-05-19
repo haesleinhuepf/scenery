@@ -115,13 +115,9 @@ class VulkanDevice(
         return vulkanDevice.createCommandPool(cmdPoolInfo)
     }
 
-    fun destroyCommandPool(commandPool: VkCommandPool) {
-        vulkanDevice.destroyCommandPool(commandPool)
-    }
+    fun destroyCommandPool(commandPool: VkCommandPool) = vulkanDevice.destroyCommandPool(commandPool)
 
-    override fun toString(): String {
-        return "${deviceData.vendor} ${deviceData.name}"
-    }
+    override fun toString(): String = "${deviceData.vendor} ${deviceData.name}"
 
     fun close() {
         logger.debug("Closing device ${deviceData.vendor} ${deviceData.name}...")

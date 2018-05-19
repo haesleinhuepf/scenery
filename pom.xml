@@ -514,7 +514,7 @@
         <dependency>
             <groupId>com.github.kotlin-graphics</groupId>
             <artifactId>vkk</artifactId>
-            <version>d74b465bcaa63acf1f4f09a02f1ad6da783404e5</version>
+            <version>dd3c03eed7a5bb016e5ac57992edaecb400479db</version>
         </dependency>
 
         <dependency>

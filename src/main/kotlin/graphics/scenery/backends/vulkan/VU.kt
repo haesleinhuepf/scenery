@@ -17,6 +17,7 @@ import org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 import org.lwjgl.vulkan.KHRSwapchain.VK_SUBOPTIMAL_KHR
 import org.lwjgl.vulkan.VK10.*
 import org.slf4j.LoggerFactory
+import vkk.*
 import java.math.BigInteger
 import java.nio.IntBuffer
 import java.nio.LongBuffer
@@ -375,6 +376,18 @@ class VU {
             }
         }
 
+        fun setImageLayout(commandBuffer: VkCommandBuffer, image: VkImage, aspectMask: VkImageAspectFlags, oldImageLayout: VkImageLayout, newImageLayout: VkImageLayout) {
+            stackPush().use { stack ->
+                val range = VkImageSubresourceRange.callocStack(stack)
+                    .aspectMask(aspectMask)
+                    .baseMipLevel(0)
+                    .levelCount(1)
+                    .layerCount(1)
+
+                setImageLayout(commandBuffer, image, oldImageLayout.i, newImageLayout.i, range)
+            }
+        }
+
         fun setImageLayout(commandBuffer: VkCommandBuffer, image: Long, aspectMask: Int, oldImageLayout: Int, newImageLayout: Int) {
             stackPush().use { stack ->
                 val range = VkImageSubresourceRange.callocStack(stack)
@@ -564,7 +577,7 @@ class VU {
 
         fun createRenderTargetDescriptorSet(device: VulkanDevice, descriptorPool: Long, descriptorSetLayout: Long,
                                              rt: Map<String, RenderConfigReader.TargetFormat>,
-                                             target: VulkanFramebuffer, onlyFor: String? = null): Long {
+                                             target: VulkanFramebuffer, onlyFor: String? = null): VkDescriptorSet {
 
             return stackPush().use { stack ->
                 val pDescriptorSetLayout = stack.callocLong(1).put(0, descriptorSetLayout)
@@ -586,8 +599,8 @@ class VU {
                         val d = VkDescriptorImageInfo.callocStack(1, stack)
 
                         d
-                            .imageView(attachment.imageView.get(0))
-                            .sampler(target.framebufferSampler.get(0))
+                            .imageView(attachment.imageView)
+                            .sampler(target.framebufferSampler)
                             .imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 
                         writeDescriptorSet[i]
@@ -608,8 +621,8 @@ class VU {
                         val d = VkDescriptorImageInfo.callocStack(1, stack)
 
                         d
-                            .imageView(attachment.imageView.get(0))
-                            .sampler(target.framebufferSampler.get(0))
+                            .imageView(attachment.imageView)
+                            .sampler(target.framebufferSampler)
                             .imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 
                         writeDescriptorSet[0]

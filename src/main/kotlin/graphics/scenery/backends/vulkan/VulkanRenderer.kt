@@ -1438,10 +1438,10 @@ open class VulkanRenderer(hub: Hub,
 
                         pass.output.values.first().attachments.values.forEachIndexed { i, att ->
                             when (att.type) {
-                                VulkanFramebuffer.VulkanFramebufferType.COLOR_ATTACHMENT -> {
+                                VulkanFramebuffer.AttachmentType.COLOR -> {
                                     clearValues[i].color().float32().put(pass.passConfig.clearColor.toFloatArray())
                                 }
-                                VulkanFramebuffer.VulkanFramebufferType.DEPTH_ATTACHMENT -> {
+                                VulkanFramebuffer.AttachmentType.DEPTH -> {
                                     clearValues[i].depthStencil().set(pass.passConfig.depthClearValue, 0)
                                 }
                             }
@@ -2210,8 +2210,8 @@ open class VulkanRenderer(hub: Hub,
         pass.vulkanMetadata.renderPassBeginInfo
             .sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
             .pNext(NULL)
-            .renderPass(target.renderPass.get(0))
-            .framebuffer(target.framebuffer.get(0))
+            .renderPass(target.renderPass)
+            .framebuffer(target.framebuffer)
             .renderArea(pass.vulkanMetadata.renderArea)
             .pClearValues(pass.vulkanMetadata.clearValues)
 
@@ -2341,8 +2341,8 @@ open class VulkanRenderer(hub: Hub,
                         for((_, inputAttachment) in attachmentList) {
 
                             val type = when(inputAttachment.type) {
-                                VulkanFramebuffer.VulkanFramebufferType.COLOR_ATTACHMENT -> VK_IMAGE_ASPECT_COLOR_BIT
-                                VulkanFramebuffer.VulkanFramebufferType.DEPTH_ATTACHMENT -> VK_IMAGE_ASPECT_DEPTH_BIT
+                                VulkanFramebuffer.AttachmentType.COLOR -> VK_IMAGE_ASPECT_COLOR_BIT
+                                VulkanFramebuffer.AttachmentType.DEPTH -> VK_IMAGE_ASPECT_DEPTH_BIT
                             }
 
                             // return to use() if no output with the correct attachment type is found
@@ -2353,23 +2353,23 @@ open class VulkanRenderer(hub: Hub,
                             }
 
                             val outputAspectSrcType = when(outputAttachment.type) {
-                                VulkanFramebuffer.VulkanFramebufferType.COLOR_ATTACHMENT -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                VulkanFramebuffer.VulkanFramebufferType.DEPTH_ATTACHMENT -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                VulkanFramebuffer.AttachmentType.COLOR -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                VulkanFramebuffer.AttachmentType.DEPTH -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                             }
 
                             val outputAspectDstType = when(outputAttachment.type) {
-                                VulkanFramebuffer.VulkanFramebufferType.COLOR_ATTACHMENT -> VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-                                VulkanFramebuffer.VulkanFramebufferType.DEPTH_ATTACHMENT -> VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                VulkanFramebuffer.AttachmentType.COLOR -> VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                VulkanFramebuffer.AttachmentType.DEPTH -> VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
                             }
 
                             val inputAspectType = when(inputAttachment.type) {
-                                VulkanFramebuffer.VulkanFramebufferType.COLOR_ATTACHMENT -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                VulkanFramebuffer.VulkanFramebufferType.DEPTH_ATTACHMENT -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                VulkanFramebuffer.AttachmentType.COLOR -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                VulkanFramebuffer.AttachmentType.DEPTH -> VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                             }
 
                             val outputDstStage = when(outputAttachment.type) {
-                                VulkanFramebuffer.VulkanFramebufferType.COLOR_ATTACHMENT -> VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                VulkanFramebuffer.VulkanFramebufferType.DEPTH_ATTACHMENT -> VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+                                VulkanFramebuffer.AttachmentType.COLOR -> VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                                VulkanFramebuffer.AttachmentType.DEPTH -> VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
                             }
 
                             val offsetX = (input.width * pass.passConfig.viewportOffset.first).toInt()
@@ -2588,8 +2588,8 @@ open class VulkanRenderer(hub: Hub,
         pass.vulkanMetadata.renderPassBeginInfo
             .sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
             .pNext(NULL)
-            .renderPass(target.renderPass.get(0))
-            .framebuffer(target.framebuffer.get(0))
+            .renderPass(target.renderPass)
+            .framebuffer(target.framebuffer)
             .renderArea(pass.vulkanMetadata.renderArea)
             .pClearValues(pass.vulkanMetadata.clearValues)
 
