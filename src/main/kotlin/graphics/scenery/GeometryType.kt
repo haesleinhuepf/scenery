@@ -1,5 +1,7 @@
 package graphics.scenery
 
+import vkk.VkPrimitiveTopology
+
 /**
  * Enum class storing the geometry type, e.g. of a [Node]
  *
@@ -24,5 +26,17 @@ enum class GeometryType {
     /** Draw vertices as lines, with adjacency information. */
     LINES_ADJACENCY,
     /** Draw vertices as line strips, with adjacency information. */
-    LINE_STRIP_ADJACENCY
+    LINE_STRIP_ADJACENCY;
+
+    val asVulkanTopology
+        get() = when (this) {
+            TRIANGLE_FAN -> VkPrimitiveTopology.TRIANGLE_FAN
+            TRIANGLES -> VkPrimitiveTopology.TRIANGLE_LIST
+            LINE -> VkPrimitiveTopology.LINE_LIST
+            POINTS -> VkPrimitiveTopology.POINT_LIST
+            LINES_ADJACENCY -> VkPrimitiveTopology.LINE_LIST_WITH_ADJACENCY
+            LINE_STRIP_ADJACENCY -> VkPrimitiveTopology.LINE_STRIP_WITH_ADJACENCY
+            POLYGON -> VkPrimitiveTopology.TRIANGLE_LIST
+            TRIANGLE_STRIP -> VkPrimitiveTopology.TRIANGLE_STRIP
+        }
 }

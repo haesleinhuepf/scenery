@@ -24,6 +24,8 @@ import org.lwjgl.vulkan.EXTDebugReport.*
 import org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 import org.lwjgl.vulkan.VK10.*
 import vkk.VkCommandPool
+import vkk.VkPipeline
+import vkk.VkPipelineLayout
 import vkk.appBuffer
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferByte
@@ -113,10 +115,9 @@ open class VulkanRenderer(hub: Hub,
         val memoryProperties: VkPhysicalDeviceMemoryProperties? = null
     )
 
-    class Pipeline {
-        internal var pipeline: Long = 0
-        internal var layout: Long = 0
-    }
+    class Pipeline(
+        internal var pipeline: VkPipeline = NULL,
+        internal var layout: VkPipelineLayout = NULL)
 
     sealed class DescriptorSet(val id: Long = 0L, val name: String = "") {
         object None: DescriptorSet(0L)
