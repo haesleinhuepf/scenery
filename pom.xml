@@ -514,7 +514,13 @@
         <dependency>
             <groupId>com.github.kotlin-graphics</groupId>
             <artifactId>vkk</artifactId>
-            <version>90e2496ddc398fe953e13b99f14a0fd50a631ad1</version>
+            <version>8f779f65935a585c68e2c0705357d689a5d4345e</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.kotlin-graphics</groupId>
+            <artifactId>appBuffer</artifactId>
+            <version>8e7c97d4bb6651ce7d9446cd4ac619b7cc8c72ed</version>
         </dependency>
 
         <dependency>

@@ -26,7 +26,7 @@ import org.lwjgl.vulkan.VK10.*
 import vkk.VkCommandPool
 import vkk.VkPipeline
 import vkk.VkPipelineLayout
-import vkk.appBuffer
+import ab.appBuffer
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferByte
 import java.io.File
