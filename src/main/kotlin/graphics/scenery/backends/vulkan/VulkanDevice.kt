@@ -21,7 +21,7 @@ class VulkanDevice(
     val extensions = ArrayList<String>()
 
     enum class DeviceType { Unknown, Other, IntegratedGPU, DiscreteGPU, VirtualGPU, CPU }
-    data class DeviceData(val vendor: String, val name: String, val driverVersion: String, val apiVersion: String, val type: VkPhysicalDeviceType)
+    data class DeviceData(val vendor: VkVendor, val name: String, val driverVersion: String, val apiVersion: String, val type: VkPhysicalDeviceType)
     data class QueueIndices(val presentQueue: Int, val graphicsQueue: Int, val computeQueue: Int)
 
     init {
@@ -136,7 +136,7 @@ class VulkanDevice(
 
         val deviceWorkarounds = listOf(
             DeviceWorkaround(
-                { it.vendor == "Nvidia" && it.driverVersion.substringBefore(".").toInt() >= 396 },
+                { it.vendor == VkVendor.Nvidia && it.driverVersion.substringBefore(".").toInt() >= 396 },
                 "Nvidia 396.xx series drivers are unsupported due to crashing bugs in the driver") {
                 if (System.getenv("__GL_NextGenCompiler") == null) {
                     logger.warn("The graphics driver version you are using (${it.driverVersion}) contains a bug that prevents scenery's Vulkan renderer from functioning correctly.")
@@ -169,7 +169,7 @@ class VulkanDevice(
                 vkGetPhysicalDeviceProperties(device, properties)
 
                 val deviceData = DeviceData(
-                    vendor = properties.vendorName,
+                    vendor = properties.vendor,
                     name = properties.deviceName,
                     driverVersion = properties.driverVersionString,
                     apiVersion = properties.apiVersionString,

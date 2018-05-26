@@ -271,7 +271,7 @@ open class VulkanRenderer(hub: Hub,
     protected var instance: VkInstance
     protected var device: VulkanDevice
 
-    protected var debugCallbackHandle: Long
+    protected var debugCallbackHandle: VkDebugReportCallback = NULL
     protected var timestampQueryPool: VkQueryPool = NULL
 
     protected var semaphoreCreateInfo: VkSemaphoreCreateInfo
@@ -310,22 +310,22 @@ open class VulkanRenderer(hub: Hub,
 
     private val vulkanProjectionFix =
         GLMatrix(floatArrayOf(
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, -1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.5f, 0.0f,
-            0.0f, 0.0f, 0.5f, 1.0f))
+            1f, 0f, 0f, 0f,
+            0f, -1f, 0f, 0f,
+            0f, 0f, .5f, 0f,
+            0f, 0f, .5f, 1f))
 
     final override var renderConfigFile: String = ""
         set(config) {
             field = config
 
-            this.renderConfig = RenderConfigReader().loadFromFile(renderConfigFile)
+            renderConfig = RenderConfigReader().loadFromFile(renderConfigFile)
 
             // check for null as this is used in the constructor as well where
             // the swapchain recreator is not yet initialized
             @Suppress("SENSELESS_COMPARISON")
-            if (swapchainRecreator != null) {
-                swapchainRecreator.mustRecreate = true
+            swapchainRecreator?.let {
+                it.mustRecreate = true
                 logger.info("Loaded ${renderConfig.name} (${renderConfig.description ?: "no description"})")
             }
         }
@@ -340,8 +340,8 @@ open class VulkanRenderer(hub: Hub,
         if (hmd != null) {
             logger.info("Setting window dimensions to bounds from HMD")
             val bounds = hmd.getRenderTargetSize()
-            window.width = bounds.x().toInt() * 2
-            window.height = bounds.y().toInt()
+            window.width = bounds.x().i * 2
+            window.height = bounds.y().i
         } else {
             window.width = windowWidth
             window.height = windowHeight
@@ -350,15 +350,15 @@ open class VulkanRenderer(hub: Hub,
         this.applicationName = applicationName
         this.scene = scene
 
-        this.settings = loadDefaultRendererSettings((hub.get(SceneryElement.Settings) as Settings))
+        settings = loadDefaultRendererSettings((hub.get(SceneryElement.Settings) as Settings))
 
         logger.debug("Loading rendering config from $renderConfigFile")
         this.renderConfigFile = renderConfigFile
-        this.renderConfig = RenderConfigReader().loadFromFile(renderConfigFile)
+        renderConfig = RenderConfigReader().loadFromFile(renderConfigFile)
 
         logger.info("Loaded ${renderConfig.name} (${renderConfig.description ?: "no description"})")
 
-        if ((System.getenv("ENABLE_VULKAN_RENDERDOC_CAPTURE")?.toInt() == 1 || Renderdoc.renderdocAttached) && validation) {
+        if ((System.getenv("ENABLE_VULKAN_RENDERDOC_CAPTURE")?.i == 1 || Renderdoc.renderdocAttached) && validation) {
             logger.warn("Validation Layers requested, but Renderdoc capture and Validation Layers are mutually incompatible. Disabling validations layers.")
             validation = false
         }
@@ -386,23 +386,20 @@ open class VulkanRenderer(hub: Hub,
 
         // Create the Vulkan instance
         instance = createInstance(requiredExtensions)
-        debugCallbackHandle = if (validation) {
-            setupDebugging(instance,
-                VK_DEBUG_REPORT_ERROR_BIT_EXT or VK_DEBUG_REPORT_WARNING_BIT_EXT,
-                debugCallback)
-        } else {
-            -1L
+        debugCallbackHandle = when {
+            validation -> setupDebugging(instance, VkDebugReport.ERROR_BIT_EXT or VkDebugReport.WARNING_BIT_EXT, debugCallback)
+            else -> NULL
         }
 
-        val requestedValidationLayers = if (validation) {
-            if (wantsOpenGLSwapchain) {
-                logger.warn("Requested OpenGL swapchain, validation layers disabled.")
-                emptyList()
-            } else {
-                defaultValidationLayers
+        val requestedValidationLayers = when {
+            validation -> when {
+                wantsOpenGLSwapchain -> {
+                    logger.warn("Requested OpenGL swapchain, validation layers disabled.")
+                    emptyList()
+                }
+                else -> defaultValidationLayers
             }
-        } else {
-            emptyList()
+            else -> emptyList()
         }
 
         device = VulkanDevice.fromPhysicalDevice(instance,
@@ -414,12 +411,13 @@ open class VulkanRenderer(hub: Hub,
 
         logger.debug("Device creation done")
 
-        if (device.deviceData.vendor.toLowerCase().contains("nvidia") && ExtractsNatives.getPlatform() == ExtractsNatives.Platform.WINDOWS) {
+        if (device.deviceData.vendor == VkVendor.Nvidia && ExtractsNatives.getPlatform() == ExtractsNatives.Platform.WINDOWS) {
             gpuStats = NvidiaGPUStats()
         }
 
-        queue = VU.createDeviceQueue(device, device.queueIndices.graphicsQueue)
-        with(commandPools) {
+        queue = device.vulkanDevice.getQueue(device.queueIndices.graphicsQueue)
+
+        commandPools.apply {
             Render = device.createCommandPool(device.queueIndices.graphicsQueue)
             Standard = device.createCommandPool(device.queueIndices.graphicsQueue)
             Compute = device.createCommandPool(device.queueIndices.graphicsQueue)
@@ -431,31 +429,25 @@ open class VulkanRenderer(hub: Hub,
         swapchain = when {
             wantsOpenGLSwapchain -> {
                 logger.info("Using OpenGL-based swapchain")
-                OpenGLSwapchain(
-                    device, queue, commandPools.Standard,
+                OpenGLSwapchain(device, queue, commandPools.Standard,
                     renderConfig = renderConfig, useSRGB = renderConfig.sRGB,
-                    useFramelock = System.getProperty("scenery.Renderer.Framelock", "false").toBoolean())
+                    useFramelock = System.getProperty("scenery.Renderer.Framelock", "false")!!.toBoolean())
             }
 
-            (System.getProperty("scenery.Headless", "false").toBoolean()) -> {
+            (System.getProperty("scenery.Headless", "false")!!.toBoolean()) -> {
                 logger.info("Vulkan running in headless mode.")
-                HeadlessSwapchain(
-                    device, queue, commandPools.Standard,
+                HeadlessSwapchain(device, queue, commandPools.Standard,
                     renderConfig = renderConfig, useSRGB = renderConfig.sRGB)
             }
 
-            (System.getProperty("scenery.Renderer.UseJavaFX", "false").toBoolean() || embedIn != null) -> {
+            (System.getProperty("scenery.Renderer.UseJavaFX", "false")!!.toBoolean() || embedIn != null) -> {
                 logger.info("Using JavaFX-based swapchain")
-                FXSwapchain(
-                    device, queue, commandPools.Standard,
+                FXSwapchain(device, queue, commandPools.Standard,
                     renderConfig = renderConfig, useSRGB = renderConfig.sRGB)
             }
 
-            else -> {
-                VulkanSwapchain(
-                    device, queue, commandPools.Standard,
-                    renderConfig = renderConfig, useSRGB = renderConfig.sRGB)
-            }
+            else -> VulkanSwapchain(device, queue, commandPools.Standard,
+                renderConfig = renderConfig, useSRGB = renderConfig.sRGB)
         }.apply {
             embedIn(embedIn)
             window = createWindow(window, swapchainRecreator)
@@ -1090,113 +1082,69 @@ open class VulkanRenderer(hub: Hub,
     }
 
     protected fun prepareStandardVertexDescriptors(): ConcurrentHashMap<VertexDataKinds, VertexDescription> {
-        val map = ConcurrentHashMap<VertexDataKinds, VertexDescription>()
 
-        VertexDataKinds.values().forEach { kind ->
-            val attributeDesc: VkVertexInputAttributeDescription.Buffer?
-            var stride = 0
+        return VertexDataKinds.values().associateTo(ConcurrentHashMap()) { kind ->
+            val (stride, attributeDesc) = when (kind) {
+                VertexDataKinds.None -> 0 to null
 
-            when (kind) {
-                VertexDataKinds.None -> {
-                    stride = 0
-                    attributeDesc = null
+                VertexDataKinds.PositionNormal -> (3 + 3) to cVkVertexInputAttributeDescription(2).also {
+                    it[1](1, 0, VkFormat.R32G32B32_SFLOAT, 3 * 4)
                 }
 
-                VertexDataKinds.PositionNormal -> {
-                    stride = 3 + 3
-                    attributeDesc = VkVertexInputAttributeDescription.calloc(2)
-
-                    attributeDesc.get(1)
-                        .binding(0)
-                        .location(1)
-                        .format(VK_FORMAT_R32G32B32_SFLOAT)
-                        .offset(3 * 4)
+                VertexDataKinds.PositionNormalTexcoord -> (3 + 3 + 2) to cVkVertexInputAttributeDescription(3).also {
+                    it[1](1, 0, VkFormat.R32G32B32_SFLOAT, 3 * 4)
+                    it[2](2, 0, VkFormat.R32G32_SFLOAT, 3 * 4 + 3 * 4)
                 }
 
-                VertexDataKinds.PositionNormalTexcoord -> {
-                    stride = 3 + 3 + 2
-                    attributeDesc = VkVertexInputAttributeDescription.calloc(3)
-
-                    attributeDesc.get(1)
-                        .binding(0)
-                        .location(1)
-                        .format(VK_FORMAT_R32G32B32_SFLOAT)
-                        .offset(3 * 4)
-
-                    attributeDesc.get(2)
-                        .binding(0)
-                        .location(2)
-                        .format(VK_FORMAT_R32G32_SFLOAT)
-                        .offset(3 * 4 + 3 * 4)
-                }
-
-                VertexDataKinds.PositionTexcoords -> {
-                    stride = 3 + 2
-                    attributeDesc = VkVertexInputAttributeDescription.calloc(2)
-
-                    attributeDesc.get(1)
-                        .binding(0)
-                        .location(1)
-                        .format(VK_FORMAT_R32G32_SFLOAT)
-                        .offset(3 * 4)
+                VertexDataKinds.PositionTexcoords -> (3 + 2) to cVkVertexInputAttributeDescription(2).also {
+                    it[1](1, 0, VkFormat.R32G32_SFLOAT, 3 * 4)
                 }
             }
 
             attributeDesc?.let {
                 if (it.capacity() > 0) {
-                    it.get(0).binding(0).location(0).format(VK_FORMAT_R32G32B32_SFLOAT).offset(0)
+                    it[0](0, 0, VkFormat.R32G32B32_SFLOAT, 0)
                 }
             }
 
-            val bindingDesc: VkVertexInputBindingDescription.Buffer? = if (attributeDesc != null) {
-                VkVertexInputBindingDescription.calloc(1)
-                    .binding(0)
-                    .stride(stride * 4)
-                    .inputRate(VK_VERTEX_INPUT_RATE_VERTEX)
-            } else {
-                null
+            val bindingDesc = cVkVertexInputBindingDescription(1) {
+                this(0, stride * 4, VkVertexInputRate.VERTEX)
+            }.takeIf { attributeDesc != null }
+
+            val inputState = cVkPipelineVertexInputStateCreateInfo {
+                vertexAttributeDescriptions = attributeDesc
+                vertexBindingDescriptions = bindingDesc
             }
-
-            val inputState = VkPipelineVertexInputStateCreateInfo.calloc()
-                .sType(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO)
-                .pNext(NULL)
-                .pVertexAttributeDescriptions(attributeDesc)
-                .pVertexBindingDescriptions(bindingDesc)
-
-            map.put(kind, VertexDescription(inputState, attributeDesc, bindingDesc))
+            kind to VertexDescription(inputState, attributeDesc, bindingDesc)
         }
-
-        return map
     }
 
-    data class AttributeInfo(val format: Int, val elementByteSize: Int, val elementCount: Int)
+    data class AttributeInfo(val format: VkFormat, val elementByteSize: Int, val elementCount: Int)
 
-    fun HashMap<String, () -> Any>.getFormatsAndRequiredAttributeSize(): List<AttributeInfo> {
-        return this.map {
-            val value = it.value.invoke()
+    fun HashMap<String, () -> Any>.getFormatsAndRequiredAttributeSize(): List<AttributeInfo> = map {
+        val value = it.value()
 
-            when (value.javaClass) {
-                GLVector::class.java -> {
-                    val v = value as GLVector
-                    if (v.toFloatArray().size == 2) {
-                        graphics.scenery.backends.vulkan.VulkanRenderer.AttributeInfo(VK_FORMAT_R32G32_SFLOAT, 4 * 2, 1)
-                    } else if (v.toFloatArray().size == 4) {
-                        graphics.scenery.backends.vulkan.VulkanRenderer.AttributeInfo(VK_FORMAT_R32G32B32A32_SFLOAT, 4 * 4, 1)
-                    } else {
+        when (value.javaClass) {
+            GLVector::class.java -> {
+                val v = value as GLVector
+                when (v.toFloatArray().size) {
+                    2 -> AttributeInfo(VkFormat.R32G32_SFLOAT, 4 * 2, 1)
+                    4 -> AttributeInfo(VkFormat.R32G32B32A32_SFLOAT, 4 * 4, 1)
+                    else -> {
                         logger.error("Unsupported vector length for instancing: ${v.toFloatArray().size}")
-                        graphics.scenery.backends.vulkan.VulkanRenderer.AttributeInfo(-1, -1, -1)
+                        AttributeInfo(VkFormat.UNDEFINED, -1, -1)
                     }
                 }
+            }
 
-                GLMatrix::class.java -> {
-                    val m = value as GLMatrix
-                    graphics.scenery.backends.vulkan.VulkanRenderer.AttributeInfo(VK_FORMAT_R32G32B32A32_SFLOAT, 4 * 4, m.floatArray.size / 4)
-                }
+            GLMatrix::class.java -> {
+                val m = value as GLMatrix
+                AttributeInfo(VkFormat.R32G32B32A32_SFLOAT, 4 * 4, m.floatArray.size / 4)
+            }
 
-                else -> {
-                    logger.error("Unsupported type for instancing: ${value.javaClass.simpleName}")
-                    graphics.scenery.backends.vulkan.VulkanRenderer.AttributeInfo(-1, -1, -1)
-                }
+            else -> {
+                logger.error("Unsupported type for instancing: ${value.javaClass.simpleName}")
+                AttributeInfo(VkFormat.UNDEFINED, -1, -1)
             }
         }
     }
@@ -1212,7 +1160,7 @@ open class VulkanRenderer(hub: Hub,
         val bindingDescs = template.bindingDescription!!
 
         val formatsAndAttributeSizes = node.instancedProperties.getFormatsAndRequiredAttributeSize()
-        val newAttributesNeeded = formatsAndAttributeSizes.map { it.elementCount }.sum()
+        val newAttributesNeeded = formatsAndAttributeSizes.sumBy { it.elementCount }
 
         val newAttributeDesc = VkVertexInputAttributeDescription
             .calloc(attributeDescs.capacity() + newAttributesNeeded)
@@ -1239,7 +1187,7 @@ open class VulkanRenderer(hub: Hub,
                 newAttributeDesc[position]
                     .binding(1)
                     .location(position)
-                    .format(attribInfo.format)
+                    .format(attribInfo.format.i)
                     .offset(offset)
 
                 logger.debug("location($position, $it/${attribInfo.elementCount}) for ${property.first}, type: ${property.second.invoke().javaClass.simpleName}")
@@ -1836,47 +1784,36 @@ open class VulkanRenderer(hub: Hub,
     }
 
     private fun createInstance(requiredExtensions: PointerBuffer): VkInstance {
-        return stackPush().use { stack ->
-            val appInfo = VkApplicationInfo.callocStack(stack)
-                .sType(VK_STRUCTURE_TYPE_APPLICATION_INFO)
-                .pApplicationName(stack.UTF8(applicationName))
-                .pEngineName(stack.UTF8("scenery"))
-                .apiVersion(VK_MAKE_VERSION(1, 0, 73))
 
-            val additionalExts: List<String> = hub?.getWorkingHMDDisplay()?.getVulkanInstanceExtensions() ?: listOf()
-            val utf8Exts = additionalExts.map { stack.UTF8(it) }
-
-            logger.debug("HMD required instance exts: ${additionalExts.joinToString(", ")} ${additionalExts.size}")
-
-            // allocate enough pointers for already pre-required extensions, plus HMD-required extensions, plus the debug extension
-            val enabledExtensionNames = stack.callocPointer(requiredExtensions.remaining() + additionalExts.size + 1)
-            enabledExtensionNames.put(requiredExtensions)
-            enabledExtensionNames.put(stack.UTF8(VK_EXT_DEBUG_REPORT_EXTENSION_NAME))
-            utf8Exts.forEach { enabledExtensionNames.put(it) }
-            enabledExtensionNames.flip()
-
-            val enabledLayerNames = if (!wantsOpenGLSwapchain && validation) {
-                val pointers = stack.callocPointer(defaultValidationLayers.size)
-                defaultValidationLayers.forEach { pointers.put(stack.UTF8(it)) }
-                pointers
-            } else {
-                stack.callocPointer(0)
-            }
-
-            enabledLayerNames.flip()
-
-            val createInfo = VkInstanceCreateInfo.callocStack(stack)
-                .sType(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO)
-                .pNext(NULL)
-                .pApplicationInfo(appInfo)
-                .ppEnabledExtensionNames(enabledExtensionNames)
-                .ppEnabledLayerNames(enabledLayerNames)
-
-            val instance = VU.getPointer("Creating Vulkan instance",
-                { vkCreateInstance(createInfo, null, this) }, {})
-
-            VkInstance(instance, createInfo)
+        val appInfo = vk.ApplicationInfo {
+            applicationName = applicationName
+            engineName = "scenery"
+            apiVersion = VK_MAKE_VERSION(1, 0, 73)
         }
+        val additionalExts: List<String> = hub?.getWorkingHMDDisplay()?.getVulkanInstanceExtensions() ?: listOf()
+        val utf8Exts = additionalExts.map { appBuffer.bufferOfUtf8(it) }
+
+        logger.debug("HMD required instance exts: ${additionalExts.joinToString()} ${additionalExts.size}")
+
+        // allocate enough pointers for already pre-required extensions, plus HMD-required extensions, plus the debug extension
+        val enabledExtensionNames = appBuffer.pointerBuffer(requiredExtensions.remaining() + additionalExts.size + 1).also { e ->
+            e.put(requiredExtensions)
+            e.put(appBuffer.bufferOfUtf8(VK_EXT_DEBUG_REPORT_EXTENSION_NAME))
+            utf8Exts.forEach { e.put(it) }
+            e.flip()
+        }
+        val enabledLayerNames = when {
+            !wantsOpenGLSwapchain && validation -> appBuffer.pointerBuffer(defaultValidationLayers.size).also { p ->
+                defaultValidationLayers.forEach { p.put(appBuffer.bufferOfUtf8(it)) }
+            }
+            else -> appBuffer.pointerBuffer(0)
+        }.flip()
+
+        val createInfo = vk.InstanceCreateInfo { applicationInfo = appInfo }
+            .ppEnabledExtensionNames(enabledExtensionNames)
+            .ppEnabledLayerNames(enabledLayerNames)
+
+        return vk.createInstance(createInfo)
     }
 
     private fun setupDebugging(instance: VkInstance, flags: Int, callback: VkDebugReportCallbackType): VkDebugReportCallback {
@@ -2868,7 +2805,7 @@ open class VulkanRenderer(hub: Hub,
 
         vkDestroyPipelineCache(device.vulkanDevice, pipelineCache, null)
 
-        if (validation) {
+        if (validation && debugCallbackHandle != NULL) {
             vkDestroyDebugReportCallbackEXT(instance, debugCallbackHandle, null)
         }
 

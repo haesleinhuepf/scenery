@@ -2,11 +2,13 @@ package graphics.scenery.backends.vulkan
 
 import ab.appBuffer
 import glm_.buffer.free
+import glm_.set
 import org.lwjgl.system.MemoryUtil.*
 import org.lwjgl.vulkan.*
 import org.lwjgl.vulkan.VK10.*
 import graphics.scenery.GeometryType
 import graphics.scenery.utils.LazyLogger
+import org.lwjgl.system.MemoryUtil
 import vkk.*
 import java.nio.IntBuffer
 import java.util.*
@@ -47,7 +49,10 @@ class VulkanPipeline(val device: VulkanDevice, val pipelineCache: Long? = null) 
         viewportCount = 1
         scissorCount = 1
     }
-    val dynamicStates: IntBuffer = appBuffer.intBufferOf(VkDynamicState.VIEWPORT.i, VkDynamicState.SCISSOR.i)
+    val dynamicStates: IntBuffer = memAllocInt(2).also {
+        it[0] = VkDynamicState.VIEWPORT.i
+        it[1] = VkDynamicState.SCISSOR.i
+    }
 
     val dynamicState: VkPipelineDynamicStateCreateInfo = cVkPipelineDynamicStateCreateInfo {
         dynamicStates = this@VulkanPipeline.dynamicStates
