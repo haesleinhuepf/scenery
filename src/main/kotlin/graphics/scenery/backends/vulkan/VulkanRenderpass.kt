@@ -12,6 +12,10 @@ import graphics.scenery.backends.Renderer
 import graphics.scenery.utils.LazyLogger
 import graphics.scenery.utils.RingBuffer
 import org.lwjgl.system.MemoryUtil.*
+import vkk.VkCullMode
+import vkk.VkFrontFace
+import vkk.cullMode
+import vkk.frontFace
 import java.nio.IntBuffer
 import java.nio.LongBuffer
 import java.util.*
@@ -349,8 +353,8 @@ open class VulkanRenderpass(val name: String, var config: RenderConfigReader.Ren
 
         when(passConfig.type) {
             RenderConfigReader.RenderpassType.quad -> {
-                p.rasterizationState.cullMode(VK_CULL_MODE_FRONT_BIT)
-                p.rasterizationState.frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
+                p.rasterizationState.cullMode = VkCullMode.FRONT_BIT.i
+                p.rasterizationState.frontFace = VkFrontFace.COUNTER_CLOCKWISE
 
                 p.createPipelines(this, framebuffer.renderPass,
                     vertexDescriptors[VulkanRenderer.VertexDataKinds.None]!!.state,

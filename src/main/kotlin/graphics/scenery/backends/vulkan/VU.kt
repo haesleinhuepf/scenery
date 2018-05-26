@@ -44,6 +44,7 @@ fun VkCommandBuffer.endCommandBuffer() {
     }
 }
 
+@Deprecated("use direct")
 fun VkCommandBuffer.endCommandBuffer(device: VulkanDevice, commandPool: Long, queue: VkQueue?, flush: Boolean = true, dealloc: Boolean = false, submitInfoPNext: Pointer? = null) {
     if (this.address() == NULL) {
         return
@@ -62,22 +63,7 @@ fun VkCommandBuffer.endCommandBuffer(device: VulkanDevice, commandPool: Long, qu
     }
 }
 
-fun VkCommandBuffer.submit(queue: VkQueue, submitInfoPNext: Pointer? = null, block: Boolean = true) {
-    stackPush().use { stack ->
-        val submitInfo = VkSubmitInfo.callocStack(1, stack)
-        val commandBuffers = stack.callocPointer(1).put(0, this)
 
-        VU.run("VkCommandBuffer.submit", {
-            submitInfo
-                .sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
-                .pCommandBuffers(commandBuffers)
-                .pNext(submitInfoPNext?.address() ?: NULL)
-
-            vkQueueSubmit(queue, submitInfo, VK_NULL_HANDLE)
-            vkQueueWaitIdle(queue)
-        }, { })
-    }
-}
 
 fun Blending.BlendFactor.toVulkan() = when (this) {
     Blending.BlendFactor.Zero -> VK_BLEND_FACTOR_ZERO
@@ -407,6 +393,7 @@ class VU {
             return VkQueue(queue, device.vulkanDevice)
         }
 
+        @Deprecated("use direct")
         fun newCommandBuffer(device: VulkanDevice, commandPool: Long, level: Int = VK_COMMAND_BUFFER_LEVEL_PRIMARY): VkCommandBuffer {
             return stackPush().use { stack ->
                 val cmdBufAllocateInfo = VkCommandBufferAllocateInfo.callocStack(stack)
@@ -422,6 +409,7 @@ class VU {
             }
         }
 
+        @Deprecated("use direct")
         fun newCommandBuffer(device: VulkanDevice, commandPool: Long, level: Int = VK_COMMAND_BUFFER_LEVEL_PRIMARY, autostart: Boolean = false): VkCommandBuffer {
             val cmdBuf = newCommandBuffer(device, commandPool, level)
 
@@ -432,6 +420,7 @@ class VU {
             return cmdBuf
         }
 
+        @Deprecated("use direct")
         fun beginCommandBuffer(commandBuffer: VkCommandBuffer, flags: Int = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) {
             stackPush().use { stack ->
                 val cmdBufInfo = VkCommandBufferBeginInfo.callocStack(stack)
