@@ -1162,17 +1162,16 @@ open class VulkanRenderer(hub: Hub,
         val formatsAndAttributeSizes = node.instancedProperties.getFormatsAndRequiredAttributeSize()
         val newAttributesNeeded = formatsAndAttributeSizes.sumBy { it.elementCount }
 
-        val newAttributeDesc = VkVertexInputAttributeDescription
-            .calloc(attributeDescs.capacity() + newAttributesNeeded)
+        val newAttributeDesc = cVkVertexInputAttributeDescription(attributeDescs.capacity() + newAttributesNeeded)
 
         var position: Int
         var offset = 0
 
-        (0..attributeDescs.capacity() - 1).forEach { i ->
-            newAttributeDesc[i].set(attributeDescs[i])
-            offset += newAttributeDesc[i].offset()
-            logger.debug("location(${newAttributeDesc[i].location()})")
-            logger.debug("    .offset(${newAttributeDesc[i].offset()})")
+        attributeDescs.forEachIndexed { i, att ->
+            newAttributeDesc[i] = att
+            offset += newAttributeDesc[i].offset
+            logger.debug("location(${newAttributeDesc[i].location})")
+            logger.debug("\t.offset(${newAttributeDesc[i].offset})")
             position = i
         }
 
@@ -1183,16 +1182,16 @@ open class VulkanRenderer(hub: Hub,
             val attribInfo = it.first
             val property = it.second
 
-            (0..attribInfo.elementCount - 1).forEach {
-                newAttributeDesc[position]
-                    .binding(1)
-                    .location(position)
-                    .format(attribInfo.format.i)
-                    .offset(offset)
-
-                logger.debug("location($position, $it/${attribInfo.elementCount}) for ${property.first}, type: ${property.second.invoke().javaClass.simpleName}")
-                logger.debug("   .format(${attribInfo.format})")
-                logger.debug("   .offset($offset)")
+            (0 until attribInfo.elementCount).forEach {
+                newAttributeDesc[position].apply {
+                    binding = 1
+                    location = position
+                    format = attribInfo.format
+                    this.offset = offset
+                }
+                logger.debug("location($position, $it/${attribInfo.elementCount}) for ${property.first}, type: ${property.second().javaClass.simpleName}")
+                logger.debug("\t.format(${attribInfo.format})")
+                logger.debug("\t.offset($offset)")
 
                 offset += attribInfo.elementByteSize
                 position++
@@ -1201,27 +1200,21 @@ open class VulkanRenderer(hub: Hub,
 
         logger.debug("stride($offset), ${bindingDescs.capacity()}")
 
-        val newBindingDesc = VkVertexInputBindingDescription.calloc(bindingDescs.capacity() + 1)
-        newBindingDesc[0].set(bindingDescs[0])
-        newBindingDesc[1]
-            .binding(1)
-            .stride(offset)
-            .inputRate(VK_VERTEX_INPUT_RATE_INSTANCE)
-
-        val inputState = VkPipelineVertexInputStateCreateInfo.calloc()
-            .sType(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO)
-            .pNext(NULL)
-            .pVertexAttributeDescriptions(newAttributeDesc)
-            .pVertexBindingDescriptions(newBindingDesc)
-
+        val newBindingDesc = cVkVertexInputBindingDescription(bindingDescs.capacity() + 1).also {
+            it[0] = bindingDescs[0]
+            it[1](1, offset, VkVertexInputRate.INSTANCE)
+        }
+        val inputState = cVkPipelineVertexInputStateCreateInfo {
+            vertexAttributeDescriptions = newAttributeDesc
+            vertexBindingDescriptions = newBindingDesc
+        }
         return VertexDescription(inputState, newAttributeDesc, newBindingDesc)
     }
 
     protected fun prepareDefaultTextures(device: VulkanDevice) {
-        val t = VulkanTexture.loadFromFile(device, commandPools.Standard, queue,
-            Renderer::class.java.getResourceAsStream("DefaultTexture.png"), "png", true, true)
-
-        textureCache.put("DefaultTexture", t!!)
+        val stream = Renderer::class.java.getResourceAsStream("DefaultTexture.png")
+        val t = VulkanTexture.loadFromFile(device, commandPools.Standard, queue, stream, "png", true, true)
+        textureCache["DefaultTexture"] = t!!
     }
 
     protected fun prepareRenderpassesFromConfig(config: RenderConfigReader.RenderConfig, windowWidth: Int, windowHeight: Int) {
@@ -1229,31 +1222,25 @@ open class VulkanRenderer(hub: Hub,
         val framebuffers = ConcurrentHashMap<String, VulkanFramebuffer>()
 
         flow = renderConfig.createRenderpassFlow()
-        logger.debug("Renderpasses to be run: ${flow.joinToString(", ")}")
+        logger.debug("Renderpasses to be run: ${flow.joinToString()}")
 
         descriptorSetLayouts
             .filter { it.key.startsWith("outputs-") }
             .map {
                 logger.debug("Marking RT DSL ${it.value.toHexString()} for deletion")
-                vkDestroyDescriptorSetLayout(device.vulkanDevice, it.value, null)
+                device.vulkanDevice.destroyDescriptorSetLayout(it.value)
                 it.key
             }
-            .map {
-                descriptorSetLayouts.remove(it)
-            }
+            .map { descriptorSetLayouts - it }
 
         renderConfig.renderpasses.filter { it.value.inputs != null }
-            .flatMap { rp ->
-                rp.value.inputs!!
-            }
+            .flatMap { rp -> rp.value.inputs!! }
             .map {
                 renderConfig.rendertargets.let { rts ->
-                    val name = if (it.contains(".")) {
-                        it.substringBefore(".")
-                    } else {
-                        it
+                    val name = when {
+                        it.contains(".") -> it.substringBefore(".")
+                        else -> it
                     }
-
                     name to rts[name]!!
                 }
             }
@@ -1261,12 +1248,11 @@ open class VulkanRenderer(hub: Hub,
                 if (!descriptorSetLayouts.containsKey("outputs-${rt.first}")) {
                     logger.debug("Creating output descriptor set for ${rt.first}")
                     // create descriptor set layout that matches the render target
-                    descriptorSetLayouts.put("outputs-${rt.first}",
-                        VU.createDescriptorSetLayout(device,
-                            descriptorNum = rt.second.attachments.count(),
-                            descriptorCount = 1,
-                            type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
-                        ))
+                    descriptorSetLayouts["outputs-${rt.first}"] = VU.createDescriptorSetLayout(device,
+                        descriptorNum = rt.second.attachments.count(),
+                        descriptorCount = 1,
+                        type = VkDescriptorType.COMBINED_IMAGE_SAMPLER
+                    )
                 }
             }
 

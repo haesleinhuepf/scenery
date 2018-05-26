@@ -22,13 +22,9 @@ fun RenderConfigReader.RenderConfig.getOutputOfPass(passname: String): String? {
 }
 
 fun RenderConfigReader.RenderConfig.getInputsOfTarget(targetName: String): Set<String> {
-    rendertargets.let { rts ->
-        return rts.filter {
-            it.key == renderpasses.filter { it.value.output == targetName }.keys.first()
-        }.keys
-    }
-
-    return setOf()
+    return rendertargets.filter {
+        it.key == renderpasses.filter { it.value.output == targetName }.keys.first()
+    }.keys
 }
 
 fun RenderConfigReader.RenderConfig.createRenderpassFlow(): List<String> {
@@ -38,22 +34,17 @@ fun RenderConfigReader.RenderConfig.createRenderpassFlow(): List<String> {
     // find first
     val start = passes.filter { it.value.output == "Viewport" }.entries.first()
     var inputs: List<String>? = start.value.inputs
-    dag.add(start.key)
+    dag += start.key
 
-    while(inputs != null) {
+    while (inputs != null) {
 //        passes.filter { it.value.output == inputs!!.first().substringBefore(".") }.entries.forEach {
         passes.filter { inputs!!.map { it.substringBefore(".") }.contains(it.value.output) }.entries.forEach {
-            inputs = if (it.value.inputs == null) {
-                null
-            } else {
-                it.value.inputs!!
-            }
-
-            dag.add(it.key.substringBefore("."))
+            inputs = it.value.inputs
+            dag += it.key.substringBefore(".")
         }
     }
 
-    return dag.reversed().toSet().toList()
+    return dag.reversed().toSet().toList() // TODO get rid of toSet()?
 }
 
 class RenderConfigReader {
@@ -76,7 +67,7 @@ class RenderConfigReader {
 
     class VREyeDeserializer : JsonDeserializer<Int>() {
         override fun deserialize(p: JsonParser, ctxt: DeserializationContext?): Int {
-            return when(p.text.trim().trimEnd()) {
+            return when (p.text.trim().trimEnd()) {
                 "LeftEye" -> 0
                 "RightEye" -> 1
                 else -> -1
