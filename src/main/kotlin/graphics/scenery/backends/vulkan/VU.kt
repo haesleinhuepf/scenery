@@ -561,73 +561,39 @@ class VU {
             }
         }
 
-        fun createRenderTargetDescriptorSet(device: VulkanDevice, descriptorPool: Long, descriptorSetLayout: Long,
+        fun createRenderTargetDescriptorSet(device: VulkanDevice, descriptorPool: VkDescriptorPool, descriptorSetLayout: VkDescriptorSetLayout,
                                             rt: Map<String, RenderConfigReader.TargetFormat>,
                                             target: VulkanFramebuffer, onlyFor: String? = null): VkDescriptorSet {
 
-            return stackPush().use { stack ->
-                val pDescriptorSetLayout = stack.callocLong(1).put(0, descriptorSetLayout)
+            val allocInfo = vk.DescriptorSetAllocateInfo(descriptorPool, descriptorSetLayout)
 
-                val allocInfo = VkDescriptorSetAllocateInfo.callocStack(stack)
-                    .sType(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO)
-                    .pNext(NULL)
-                    .descriptorPool(descriptorPool)
-                    .pSetLayouts(pDescriptorSetLayout)
+            val descriptorSet = device.vulkanDevice.allocateDescriptorSets(allocInfo)
 
-                val descriptorSet = getLong("createDescriptorSet",
-                    { vkAllocateDescriptorSets(device.vulkanDevice, allocInfo, this) }, {})
-
-                val descriptorWrites = if (onlyFor == null) {
-                    val writeDescriptorSet = VkWriteDescriptorSet.callocStack(rt.size, stack)
+            val descriptorWrites = when (onlyFor) {
+                null -> vk.WriteDescriptorSet(rt.size).also { set ->
 
                     rt.entries.forEachIndexed { i, entry ->
                         val attachment = target.attachments[entry.key]!!
-                        val d = VkDescriptorImageInfo.callocStack(1, stack)
+                        val d = vk.DescriptorImageInfo(target.framebufferSampler, attachment.imageView, VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
 
-                        d
-                            .imageView(attachment.imageView)
-                            .sampler(target.framebufferSampler)
-                            .imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-
-                        writeDescriptorSet[i]
-                            .sType(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
-                            .pNext(NULL)
-                            .dstSet(descriptorSet)
-                            .dstBinding(i)
-                            .dstArrayElement(0)
-                            .pImageInfo(d)
-                            .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                        set[i](descriptorSet, VkDescriptorType.COMBINED_IMAGE_SAMPLER, i, d)
                     }
-                    writeDescriptorSet
-                } else {
-                    val writeDescriptorSet = VkWriteDescriptorSet.callocStack(1, stack)
+                }
+                else -> vk.WriteDescriptorSet(1).also { set ->
 
                     rt.entries.first { it.key == onlyFor }.apply {
                         val attachment = target.attachments[this.key]!!
-                        val d = VkDescriptorImageInfo.callocStack(1, stack)
+                        val d = vk.DescriptorImageInfo(target.framebufferSampler, attachment.imageView, VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
 
-                        d
-                            .imageView(attachment.imageView)
-                            .sampler(target.framebufferSampler)
-                            .imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-
-                        writeDescriptorSet[0]
-                            .sType(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
-                            .pNext(NULL)
-                            .dstSet(descriptorSet)
-                            .dstBinding(0)
-                            .dstArrayElement(0)
-                            .pImageInfo(d)
-                            .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                        set[0](descriptorSet, VkDescriptorType.COMBINED_IMAGE_SAMPLER, 0, d)
                     }
-                    writeDescriptorSet
                 }
-
-                vkUpdateDescriptorSets(device.vulkanDevice, descriptorWrites, null)
-
-                logger.debug("Creating framebuffer attachment descriptor $descriptorSet set with ${rt.size} bindings, DSL=$descriptorSetLayout")
-                descriptorSet
             }
+
+            device.vulkanDevice.updateDescriptorSets(descriptorWrites)
+
+            logger.debug("Creating framebuffer attachment descriptor $descriptorSet set with ${rt.size} bindings, DSL=$descriptorSetLayout")
+            return descriptorSet
         }
     }
 }

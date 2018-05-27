@@ -279,7 +279,7 @@ open class VulkanRenderer(hub: Hub,
 
     // Create static Vulkan resources
     protected var queue: VkQueue
-    protected var descriptorPool: Long
+    protected var descriptorPool: VkDescriptorPool
 
     protected var swapchain: Swapchain? = null
     protected var ph = PresentHelpers()
@@ -294,8 +294,8 @@ open class VulkanRenderer(hub: Hub,
     protected var buffers = ConcurrentHashMap<String, VulkanBuffer>()
     protected var UBOs = ConcurrentHashMap<String, VulkanUBO>()
     protected var textureCache = ConcurrentHashMap<String, VulkanTexture>()
-    protected var descriptorSetLayouts = ConcurrentHashMap<String, Long>()
-    protected var descriptorSets = ConcurrentHashMap<String, Long>()
+    protected var descriptorSetLayouts = ConcurrentHashMap<String, VkDescriptorSetLayout>()
+    protected var descriptorSets = ConcurrentHashMap<String, VkDescriptorSet>()
 
     protected var lastTime = System.nanoTime()
     protected var time = 0.0f
@@ -1330,44 +1330,36 @@ open class VulkanRenderer(hub: Hub,
                 height = windowHeight
 
                 swapchain!!.images!!.forEachIndexed { i, _ ->
-                    val fb = VulkanFramebuffer(device, commandPools.Standard,
-                        width, height, cmd, sRGB = renderConfig.sRGB)
+                    VulkanFramebuffer(device, commandPools.Standard,
+                        width, height, cmd, sRGB = renderConfig.sRGB).apply {
 
-                    fb.addSwapchainAttachment("swapchain-$i", swapchain!!, i)
-                    fb.addDepthBuffer("swapchain-$i-depth", 32)
-                    fb.createRenderpassAndFramebuffer()
+                        addSwapchainAttachment("swapchain-$i", swapchain!!, i)
+                        addDepthBuffer("swapchain-$i-depth", 32)
+                        createRenderpassAndFramebuffer()
 
-                    pass.output.put("Viewport-$i", fb)
+                        pass.output["Viewport-$i"] = this
+                    }
                 }
             }
 
             pass.vulkanMetadata.clearValues?.free()
-            if (!passConfig.blitInputs) {
-                pass.vulkanMetadata.clearValues = VkClearValue.calloc(pass.output.values.first().attachments.count())
-                pass.vulkanMetadata.clearValues?.let { clearValues ->
+            pass.vulkanMetadata.clearValues = cVkClearValue(pass.output.values.first().attachments.count()).also { clearValues ->
 
-                    pass.output.values.first().attachments.values.forEachIndexed { i, att ->
-                        when (att.type) {
-                            VulkanFramebuffer.AttachmentType.COLOR -> {
-                                clearValues[i].color().float32().put(pass.passConfig.clearColor.toFloatArray())
-                            }
-                            VulkanFramebuffer.AttachmentType.DEPTH -> {
-                                clearValues[i].depthStencil().set(pass.passConfig.depthClearValue, 0)
-                            }
-                        }
+                pass.output.values.first().attachments.values.forEachIndexed { i, att ->
+                    when (att.type) {
+                        VulkanFramebuffer.AttachmentType.COLOR -> clearValues[i].color(pass.passConfig.clearColor)
+                        VulkanFramebuffer.AttachmentType.DEPTH -> clearValues[i].depthStencil(pass.passConfig.depthClearValue, 0)
                     }
                 }
-            } else {
-                pass.vulkanMetadata.clearValues = null
-            }
+            }.takeIf { !passConfig.blitInputs }
 
-            pass.vulkanMetadata.renderArea.extent().set(
-                (pass.passConfig.viewportSize.first * width).toInt(),
-                (pass.passConfig.viewportSize.second * height).toInt())
-            pass.vulkanMetadata.renderArea.offset().set(
-                (pass.passConfig.viewportOffset.first * width).toInt(),
-                (pass.passConfig.viewportOffset.second * height).toInt())
-            logger.debug("Render area for $passName: ${pass.vulkanMetadata.renderArea.extent().width()}x${pass.vulkanMetadata.renderArea.extent().height()}")
+            pass.vulkanMetadata.renderArea.extent(
+                pass.passConfig.viewportSize.first * width,
+                pass.passConfig.viewportSize.second * height)
+            pass.vulkanMetadata.renderArea.offset(
+                pass.passConfig.viewportOffset.first * width,
+                pass.passConfig.viewportOffset.second * height)
+            logger.debug("Render area for $passName: ${pass.vulkanMetadata.renderArea.extent.width}x${pass.vulkanMetadata.renderArea.extent.height}")
 
             pass.vulkanMetadata.viewport[0].set(
                 (pass.passConfig.viewportOffset.first * width),

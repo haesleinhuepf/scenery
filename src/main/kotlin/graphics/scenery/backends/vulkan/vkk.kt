@@ -1,12 +1,14 @@
 package graphics.scenery.backends.vulkan
 
-import org.lwjgl.system.MemoryStack
-import org.lwjgl.system.MemoryUtil
-import org.lwjgl.system.MemoryUtil.NULL
-import org.lwjgl.system.Pointer
+import cleargl.GLVector
 import org.lwjgl.vulkan.*
-import vkk.*
-
 
 
 // TODO jointToString
+
+fun VkClearValue.color(v: GLVector) {
+    color().float32(0, v.x())
+    color().float32(1, v.y())
+    color().float32(2, v.z())
+    color().float32(3, v.w())
+}
