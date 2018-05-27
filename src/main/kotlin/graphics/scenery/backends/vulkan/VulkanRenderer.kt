@@ -1232,7 +1232,7 @@ open class VulkanRenderer(hub: Hub,
                 device.vulkanDevice.destroyDescriptorSetLayout(it.value)
                 it.key
             }
-            .map { descriptorSetLayouts - it }
+            .map { descriptorSetLayouts.remove(it) }
 
         renderConfig.renderpasses.filter { it.value.inputs != null }
             .flatMap { rp -> rp.value.inputs!! }
