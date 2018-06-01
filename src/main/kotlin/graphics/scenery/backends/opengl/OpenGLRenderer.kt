@@ -1703,10 +1703,10 @@ class OpenGLRenderer(hub: Hub,
                 gl.glGenBuffers(2, pbos, 0)
 
                 gl.glBindBuffer(GL4.GL_PIXEL_PACK_BUFFER, pbos[0])
-                gl.glBufferData(GL4.GL_PIXEL_PACK_BUFFER, window.width * window.height * 4L, null, GL4.GL_STREAM_READ)
+                gl.glBufferData(GL4.GL_PIXEL_PACK_BUFFER, frameWidth * frameHeight * 4L, null, GL4.GL_STREAM_READ)
 
                 gl.glBindBuffer(GL4.GL_PIXEL_PACK_BUFFER, pbos[1])
-                gl.glBufferData(GL4.GL_PIXEL_PACK_BUFFER, window.width * window.height * 4L, null, GL4.GL_STREAM_READ)
+                gl.glBufferData(GL4.GL_PIXEL_PACK_BUFFER, frameWidth * frameHeight * 4L, null, GL4.GL_STREAM_READ)
 
                 gl.glBindBuffer(GL4.GL_PIXEL_PACK_BUFFER, 0)
 
@@ -1723,17 +1723,18 @@ class OpenGLRenderer(hub: Hub,
             }
 
             if(pboBuffers[0] == null) {
-                pboBuffers[0] = MemoryUtil.memAlloc(4*window.width*window.height)
+                pboBuffers[0] = MemoryUtil.memAlloc(4*frameWidth*frameHeight)
             }
 
             if(pboBuffers[1] == null) {
-                pboBuffers[1] = MemoryUtil.memAlloc(4*window.width*window.height)
+                pboBuffers[1] = MemoryUtil.memAlloc(4*frameWidth*frameHeight)
             }
 
+            gl.glBindFramebuffer(GL4.GL_READ_FRAMEBUFFER, viewportPass.output.values.first().id)
             gl.glBindBuffer(GL4.GL_PIXEL_PACK_BUFFER, pbos[updateIndex])
-            gl.glReadPixels(0, 0, window.width, window.height, GL4.GL_BGRA, GL4.GL_UNSIGNED_BYTE, 0)
+            gl.glReadPixels(0, 0, frameWidth, frameHeight, GL4.GL_BGRA, GL4.GL_UNSIGNED_BYTE, 0)
             gl.glGetBufferSubData(GL4.GL_PIXEL_PACK_BUFFER, 0,
-                4L * window.width * window.height, pboBuffers[updateIndex])
+                4L * frameWidth * frameHeight, pboBuffers[updateIndex])
 
             if (!mustRecreateFramebuffers) {
                 embedIn?.let { embedPanel ->
@@ -1753,6 +1754,7 @@ class OpenGLRenderer(hub: Hub,
             }
 
             gl.glBindBuffer(GL4.GL_PIXEL_PACK_BUFFER, 0)
+            gl.glBindFramebuffer(GL4.GL_READ_FRAMEBUFFER, 0)
 
             embedIn?.let {
                 resizeHandler.queryResize()
