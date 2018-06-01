@@ -75,7 +75,7 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
             if (logger.isDebugEnabled) {
                 av_log_set_level(AV_LOG_TRACE)
             } else {
-                av_log_set_level(AV_LOG_INFO)
+                av_log_set_level(AV_LOG_QUIET)
             }
 
             val url = System.getProperty("scenery.StreamingAddress")
