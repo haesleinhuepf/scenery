@@ -1686,8 +1686,14 @@ class OpenGLRenderer(hub: Hub,
                 return
             }
 
-            if (recordMovie && (encoder == null || encoder?.frameWidth != window.width || encoder?.frameHeight != window.height)) {
-                encoder = H264Encoder(window.width, window.height, System.getProperty("user.home") + File.separator + "Desktop" + File.separator + "$applicationName - ${SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(Date())}.mp4")
+            val frameWidth: Int = settings.get("Renderer.displayWidth")
+            val frameHeight: Int = settings.get("Renderer.displayHeight")
+
+            if (recordMovie && (encoder == null || encoder?.frameWidth != frameWidth || encoder?.frameHeight != frameHeight )) {
+                encoder = H264Encoder(
+                    frameWidth,
+                    frameHeight,
+                    System.getProperty("user.home") + File.separator + "Desktop" + File.separator + "$applicationName - ${SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(Date())}.mp4")
             }
 
             readIndex = (readIndex + 1) % 2
