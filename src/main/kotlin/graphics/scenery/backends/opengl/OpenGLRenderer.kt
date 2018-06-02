@@ -1693,7 +1693,9 @@ class OpenGLRenderer(hub: Hub,
                 encoder = H264Encoder(
                     frameWidth,
                     frameHeight,
-                    System.getProperty("user.home") + File.separator + "Desktop" + File.separator + "$applicationName - ${SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(Date())}.mp4")
+                    filename = System.getProperty("user.home") + File.separator + "Desktop" + File.separator + "$applicationName - ${SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(Date())}.mp4",
+                    flipH = false,
+                    flipV = true)
             }
 
             readIndex = (readIndex + 1) % 2

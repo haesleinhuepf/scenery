@@ -6,10 +6,13 @@ import org.bytedeco.javacpp.avcodec.*
 import org.bytedeco.javacpp.avformat.*
 import org.bytedeco.javacpp.avutil.*
 import org.bytedeco.javacpp.swscale
+import org.bytedeco.javacpp.avfilter.*
 import java.net.InetAddress
 import java.nio.ByteBuffer
 import java.util.*
+import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
+import kotlin.math.roundToLong
 
 /**
  * H264 encoder class
@@ -21,11 +24,16 @@ import kotlin.concurrent.thread
  * @param[filename] The file name under which to save the movie. In case the system property `scenery.StreamVideo` is true,
  *      the frames are streamed via UDP multicast on the local IP, on port 3337 as MPEG transport stream.
  * @param[fps] The target frame rate for the movie.
+ * @param[quality] The encoding quality, ranges from UltraFast to VerySlow
+ * @param[flipV] Whether the encoded image should be flipped vertically
+ * @param[flipH] Whether the encoded image should be flipped horizontally
  *
  * @author Ulrik Günther <hello@ulrik.is>
  */
 
-class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, fps: Int = 60) {
+class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, fps: Int = 60,
+                  val quality: EncodingQuality = EncodingQuality.UltraFast,
+                  val flipV: Boolean = false, val flipH: Boolean = false) {
     protected val logger by LazyLogger()
     protected lateinit var frame: AVFrame
     protected lateinit var tmpframe: AVFrame
@@ -36,28 +44,49 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
     protected lateinit var stream: AVStream
 
     protected var frameNum = 0L
-    protected val timebase = AVRational().num(1).den(fps)
+    protected val timebase = AVRational().num(1).den(60)
     protected val framerate = AVRational().num(fps).den(1)
 
     protected var outputFile: String = filename
     protected var actualFrameWidth: Int = 0
     protected var actualFrameHeight: Int = 0
 
+    protected var recordingStart = 0L
+
     val networked = System.getProperty("scenery.StreamVideo", "false")?.toBoolean() ?: false
 
-    data class QueuedFrame(val bufferData: ByteBuffer?)
+    data class QueuedFrame(val bufferData: ByteBuffer?, val timestamp: Long)
+
+    enum class EncodingQuality {
+        UltraFast,
+        Fast,
+        Medium,
+        Slow,
+        VerySlow
+    }
+
+    fun EncodingQuality.toX264Preset(): String {
+        return when (this) {
+            H264Encoder.EncodingQuality.UltraFast -> "ultrafast"
+            H264Encoder.EncodingQuality.Fast -> "fast"
+            H264Encoder.EncodingQuality.Medium -> "medium"
+            H264Encoder.EncodingQuality.Slow -> "slow"
+            H264Encoder.EncodingQuality.VerySlow -> "veryslow"
+        }
+    }
 
     companion object {
         init {
             av_register_all()
             avcodec_register_all()
             avformat_network_init()
+            avfilter_register_all()
         }
     }
 
     private fun Int.nearestWholeMultipleOf(divisor: Int): Int {
         var out = this.div(divisor)
-        if(out == 0 && this > 0) {
+        if (out == 0 && this > 0) {
             out++
         }
 
@@ -71,6 +100,8 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
     protected var encoderQueue = ArrayDeque<QueuedFrame>()
 
     init {
+        val latch = CountDownLatch(1)
+
         thread {
             if (logger.isDebugEnabled) {
                 av_log_set_level(AV_LOG_TRACE)
@@ -101,14 +132,25 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
             actualFrameWidth = frameWidth.nearestWholeMultipleOf(2)
             actualFrameHeight = frameHeight.nearestWholeMultipleOf(2)
 
+
             codec = avcodec_find_encoder(outputContext.video_codec_id())
+
+            @Suppress("SENSELESS_COMPARISON")
             if (codec == null) {
                 logger.error("Could not find H264 encoder")
+
+                latch.countDown()
+                return@thread
             }
 
             codecContext = avcodec_alloc_context3(codec)
+
+            @Suppress("SENSELESS_COMPARISON")
             if (codecContext == null) {
                 logger.error("Could not allocate video codecContext")
+
+                latch.countDown()
+                return@thread
             }
 
             codecContext.codec_id(AV_CODEC_ID_H264)
@@ -123,6 +165,12 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
             codecContext.codec_tag(0)
             codecContext.codec_type(AVMEDIA_TYPE_VIDEO)
 
+            val filters = if(flipV || flipH) {
+                initializeFlippingFilters(actualFrameWidth, actualFrameHeight, codecContext.pix_fmt(), flipV, flipH)
+            } else {
+                null
+            }
+
             if (networked) {
                 codecContext.flags(CODEC_FLAG_GLOBAL_HEADER)
             }
@@ -132,19 +180,35 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                 codecContext.flags(codecContext.flags() or CODEC_FLAG_GLOBAL_HEADER)
             }
 
-            av_opt_set(codecContext.priv_data(), "preset", "ultrafast", 0)
+            av_opt_set(codecContext.priv_data(), "preset", quality.toX264Preset(), 0)
             av_opt_set(codecContext.priv_data(), "tune", "zerolatency", 0)
             av_opt_set(codecContext.priv_data(), "repeat-headers", "1", 0)
-            av_opt_set(codecContext.priv_data(), "threads", "4", 0)
+
+            val cores = Runtime.getRuntime().availableProcessors()
+            val threads = when (cores) {
+                1 -> 1
+                in 2..3 -> 2
+                else -> 4
+            }
+
+            av_opt_set(codecContext.priv_data(), "threads", threads.toString(), 0)
 
             ret = avcodec_open2(codecContext, codec, AVDictionary())
             if (ret < 0) {
                 logger.error("Could not open codec: ${ffmpegErrorString(ret)}")
+
+                latch.countDown()
+                return@thread
             }
 
             stream = avformat_new_stream(outputContext, codec)
+
+            @Suppress("SENSELESS_COMPARISON")
             if (stream == null) {
                 logger.error("Could not allocate stream")
+
+                latch.countDown()
+                return@thread
             }
 
             stream.time_base(timebase)
@@ -168,11 +232,17 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
             ret = avcodec_parameters_from_context(stream.codecpar(), codecContext)
             if (ret < 0) {
                 logger.error("Could not get codec parameters")
+
+                latch.countDown()
+                return@thread
             }
 
             ret = av_frame_get_buffer(frame, 32)
             if (ret < 0) {
                 logger.error("Could not allocate frame data")
+
+                latch.countDown()
+                return@thread
             }
 
             av_dump_format(outputContext, 0, outputFile, 1)
@@ -184,6 +254,9 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
 
                 if (ret < 0) {
                     logger.error("Failed to open output file $outputFile: $ret")
+
+                    latch.countDown()
+                    return@thread
                 }
             } else {
                 logger.debug("Not opening file as not required by outputContext")
@@ -206,18 +279,24 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
 
             if (ret < 0) {
                 logger.error("Failed to write header: ${ffmpegErrorString(ret)}")
+
+                latch.countDown()
+                return@thread
             }
 
             encoding = true
+            recordingStart = System.nanoTime()
+            latch.countDown()
 
-            while (encoding) {
+            while (encoding || encoderQueue.size > 0) {
                 if (encoderQueue.size == 0) {
                     Thread.sleep(20)
                     continue
                 }
 
                 // poll first element in the queue and use it
-                val data = encoderQueue.pollFirst().bufferData
+                val queuedFrame = encoderQueue.pollFirst()
+                val data = queuedFrame.bufferData
 
                 if (frameEncodingFailure != 0) {
                     encoding = false
@@ -247,6 +326,11 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                         tmpframe.linesize(), 0, frameHeight,
                         frame.data(), frame.linesize())
 
+                    filters?.let { f ->
+                        av_buffersrc_add_frame(f.first, frame)
+                        av_buffersink_get_frame(f.second, frame)
+                    }
+
                     avcodec_send_frame(codecContext, frame)
                 } else {
                     avcodec_send_frame(codecContext, null)
@@ -265,8 +349,9 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                     }
 
                     packet.stream_index(0)
-
-                    av_packet_rescale_ts(packet, timebase, stream.time_base())
+                    packet.pts(queuedFrame.timestamp)
+                    packet.dts(queuedFrame.timestamp)
+                    av_packet_rescale_ts(packet, AVRational().num(1).den(1000), stream.time_base())
 
                     ret = av_write_frame(outputContext, packet)
 
@@ -287,15 +372,84 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
 
             logger.info("Finished recording $outputFile, wrote $frameNum frames.")
         }
+
+        latch.await()
+    }
+
+    protected fun initializeFlippingFilters(width: Int, height: Int, pixelformat: Int, flipV: Boolean, flipH: Boolean): Pair<AVFilterContext, AVFilterContext>? {
+        val vflip = avfilter_get_by_name("vflip")
+        val hflip = avfilter_get_by_name("hflip")
+
+        val src = avfilter_get_by_name("buffer")
+        val sink = avfilter_get_by_name("buffersink")
+
+        val graphContext = avfilter_graph_alloc()
+        val filterContextH = AVFilterContext()
+        val filterContextV = AVFilterContext()
+        val srcContext = AVFilterContext()
+        val sinkContext = AVFilterContext()
+
+        val args = "video_size=${width}x$height:pix_fmt=$pixelformat:time_base=${timebase.num()}/${timebase.den()}:pixel_aspect=1/1"
+
+        if (avfilter_graph_create_filter(srcContext, src, "in", args, null, graphContext) < 0) {
+            logger.error("Could not create in filter")
+            return null
+        }
+
+        if (avfilter_graph_create_filter(sinkContext, sink, "out", null, null, graphContext) < 0) {
+            logger.error("Could not create out filter")
+            return null
+        }
+
+        if(flipV) {
+            if (avfilter_graph_create_filter(filterContextV, vflip, "vflip", null, null, graphContext) < 0) {
+                logger.error("Could not create vflip filter")
+                return null
+            }
+        }
+
+        if(flipH) {
+            if (avfilter_graph_create_filter(filterContextH, hflip, "hflip", null, null, graphContext) < 0) {
+                logger.error("Could not create hflip filter")
+                return null
+            }
+        }
+
+        if (flipH && flipV) {
+            avfilter_link(srcContext, 0, filterContextV, 0)
+            avfilter_link(filterContextV, 0, filterContextH, 0)
+            avfilter_link(filterContextH, 0, sinkContext, 0)
+        }
+
+        if (flipH && !flipV) {
+            avfilter_link(srcContext, 0, filterContextH, 0)
+            avfilter_link(filterContextH, 0, sinkContext, 0)
+        }
+
+        if (!flipH && flipV) {
+            avfilter_link(srcContext, 0, filterContextV, 0)
+            avfilter_link(filterContextV, 0, sinkContext, 0)
+        }
+
+        if(avfilter_graph_config(graphContext, null) < 0) {
+            logger.error("Could not create filter graph")
+            return null
+        }
+
+        return srcContext to sinkContext
     }
 
     fun encodeFrame(data: ByteBuffer?) {
-        encoderQueue.addLast(QueuedFrame(data))
+        encoderQueue.addLast(QueuedFrame(data, getCurrentTimestamp()))
     }
 
     fun finish() {
         encodeFrame(null)
         encoding = false
+    }
+
+    private fun getCurrentTimestamp(): Long {
+        return ((System.nanoTime() - recordingStart)/10e5).roundToLong()
     }
 
     private fun ffmpegErrorString(returnCode: Int): String {
