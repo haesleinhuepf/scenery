@@ -46,4 +46,8 @@ open class RingBuffer<T: Any>(var size: Int, default: ((Int) -> T)? = null) {
 
         backingStore.clear()
     }
+
+    fun close() {
+        backingStore.forEach { if(it is AutoCloseable) { it.close() } }
+    }
 }
