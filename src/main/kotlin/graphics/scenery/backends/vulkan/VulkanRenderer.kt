@@ -275,7 +275,8 @@ open class VulkanRenderer(hub: Hub,
 
     private var screenshotRequested = false
     private var screenshotFilename = ""
-    var screenshotBuffer: VulkanBuffer? = null
+    var screenshotBuffer: RingBuffer<VulkanBuffer>? = null
+    var bufferCache = HashMap<VulkanBuffer, ByteBuffer>()
     var imageBuffer: ByteBuffer? = null
     var encoder: H264Encoder? = null
     var recordMovie: Boolean = false
@@ -1544,6 +1545,9 @@ open class VulkanRenderer(hub: Hub,
         }
     }
 
+    var frame = 0L
+    var imageBuffers: RingBuffer<ByteBuffer>? = null
+
     private fun submitFrame(queue: VkQueue, pass: VulkanRenderpass, commandBuffer: VulkanCommandBuffer, present: PresentHelpers) {
         val stats = hub?.get(SceneryElement.Statistics) as? Statistics
         present.submitInfo
@@ -1576,14 +1580,22 @@ open class VulkanRenderer(hub: Hub,
         }
 
         if (recordMovie || screenshotRequested) {
-                // default image format is 32bit BGRA
-                val imageByteSize = window.width * window.height * 4L
-            if(screenshotBuffer == null || screenshotBuffer?.size != imageByteSize) {
+            // default image format is 32bit BGRA
+            val imageByteSize = window.width * window.height * 4L
+
+            if(screenshotBuffer == null) {
                 logger.info("Reallocating screenshot buffer")
-                screenshotBuffer = VulkanBuffer(device, imageByteSize,
-                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                    wantAligned = true)
+                screenshotBuffer = RingBuffer(4, {
+                    VulkanBuffer(device, imageByteSize,
+                        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT or VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        wantAligned = true)
+                })
+                imageBuffers = RingBuffer(2, {
+                    memAlloc(imageByteSize.toInt())
+                })
+
+                bufferCache = HashMap<VulkanBuffer, ByteBuffer>()
             }
 
             if(imageBuffer == null || imageBuffer?.capacity() != imageByteSize.toInt()) {
@@ -1598,11 +1610,12 @@ open class VulkanRenderer(hub: Hub,
                 }
 
                 if (encoder == null || encoder?.frameWidth != window.width || encoder?.frameHeight != window.height) {
-                    encoder = H264Encoder(window.width, window.height, System.getProperty("user.home") + File.separator + "Desktop" + File.separator + "$applicationName - ${SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(Date())}.mp4")
+                    encoder = H264Encoder(window.width, window.height,
+                        System.getProperty("user.home") + File.separator + "Desktop" + File.separator + "$applicationName - ${SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(Date())}.mp4")
                 }
             }
 
-            screenshotBuffer?.let { sb ->
+            screenshotBuffer?.get()?.let { sb ->
                 with(VU.newCommandBuffer(device, commandPools.Render, autostart = true)) {
                     val subresource = VkImageSubresourceLayers.calloc()
                         .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -1622,6 +1635,8 @@ open class VulkanRenderer(hub: Hub,
                     VulkanTexture.transitionLayout(image,
                         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT,
                         commandBuffer = this)
 
                     vkCmdCopyImageToBuffer(this, image,
@@ -1632,22 +1647,35 @@ open class VulkanRenderer(hub: Hub,
                     VulkanTexture.transitionLayout(image,
                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                        srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT,
                         commandBuffer = this)
 
                     this.endCommandBuffer(device, commandPools.Render, queue,
                         flush = true, dealloc = true)
                 }
 
+                val ib = imageBuffers!!.get()
                 if(screenshotRequested) {
-                    sb.copyTo(imageBuffer!!)
+                    val s = System.nanoTime()
+                    sb.copyTo(ib)
+                    val d = (System.nanoTime() - s)/10e5
+                    logger.info("copy took $d ms")
                 }
 
                 if(recordMovie) {
-                    encoder?.encodeFrame(sb.mapIfUnmapped().getByteBuffer(imageByteSize.toInt()))
+                    val s = System.nanoTime()
+                    bufferCache.getOrPut(sb, { sb.mapIfUnmapped().getByteBuffer(imageByteSize.toInt()) }).run {
+                        encoder?.encodeFrame(this)
+                    }
+                    val d = (System.nanoTime() - s)/10e5
+                    logger.info("submission took $d ms")
+
+                    frame++
                 }
 
                 if(screenshotRequested && !recordMovie) {
-                    sb.close()
+                    screenshotBuffer?.close()
                     screenshotBuffer = null
                 }
             }
@@ -2638,6 +2666,8 @@ open class VulkanRenderer(hub: Hub,
                     vulkanPipeline.layout, 0, pass.vulkanMetadata.descriptorSets, pass.vulkanMetadata.uboOffsets)
             }
 
+            vkCmdPushConstants(this, vulkanPipeline.layout, VK_SHADER_STAGE_ALL, 0, pass.vulkanMetadata.eye)
+
             vkCmdDraw(this, 3, 1, 0, 0)
 
             vkCmdEndRenderPass(this)
@@ -2838,6 +2868,10 @@ open class VulkanRenderer(hub: Hub,
     override fun close() {
         logger.info("Renderer teardown started.")
         vkQueueWaitIdle(queue)
+
+        if(recordMovie) {
+            encoder?.close()
+        }
 
         logger.debug("Cleaning texture cache...")
         textureCache.forEach {

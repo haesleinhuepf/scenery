@@ -97,6 +97,8 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
     protected var frameEncodingFailure = 0
     var encoding: Boolean = false
         private set
+    var finished: Boolean = false
+        private set
     protected var encoderQueue = ArrayDeque<QueuedFrame>()
 
     init {
@@ -262,7 +264,7 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                 logger.debug("Not opening file as not required by outputContext")
             }
 
-            logger.info("Writing movie to $outputFile, with format ${String(outputContext.oformat().long_name().stringBytes)}")
+            logger.info("Writing movie to $outputFile, with format ${String(outputContext.oformat().long_name().stringBytes)} ($threads threads)")
 
 //        Don't use SDP files for the moment
 //        if(networked) {
@@ -290,10 +292,11 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
 
             while (encoding || encoderQueue.size > 0) {
                 if (encoderQueue.size == 0) {
-                    Thread.sleep(20)
+                    Thread.sleep(1)
                     continue
                 }
 
+                val encodeStart = System.nanoTime()
                 // poll first element in the queue and use it
                 val queuedFrame = encoderQueue.pollFirst()
                 val data = queuedFrame.bufferData
@@ -312,7 +315,10 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                 av_frame_make_writable(tmpframe)
                 av_frame_make_writable(frame)
 
+                val sfill = System.nanoTime()
                 av_image_fill_arrays(tmpframe.data(), tmpframe.linesize(), BytePointer(data), AV_PIX_FMT_BGRA, frameWidth, frameHeight, 1)
+                val dfill = (System.nanoTime() - sfill)/10e5
+                logger.info("fill of $frameWidth/$frameHeight->$actualFrameWidth/$actualFrameHeight took $dfill ms")
 
                 val packet = AVPacket()
                 av_init_packet(packet)
@@ -321,21 +327,32 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                     tmpframe.pts(frameNum)
                     frame.pts(frameNum)
 
+                    val ss = System.nanoTime()
                     swscale.sws_scale(scalingContext,
                         tmpframe.data(),
                         tmpframe.linesize(), 0, frameHeight,
                         frame.data(), frame.linesize())
+                    val ds = (System.nanoTime() - ss)/10e5
+                    logger.info("swscale took $ds ms with linesize=${tmpframe.linesize()}, fh=$frameHeight, f.linesize=${frame.linesize()}")
 
+                    val sf = System.nanoTime()
                     filters?.let { f ->
                         av_buffersrc_add_frame(f.first, frame)
                         av_buffersink_get_frame(f.second, frame)
                     }
+                    val df = (System.nanoTime() - sf)/10e5
+                    logger.info("filter took $df ms")
 
-                    avcodec_send_frame(codecContext, frame)
+                    val ssf = System.nanoTime()
+                    val r = avcodec_send_frame(codecContext, frame)
+                    val dsf = (System.nanoTime() - ssf)/10e5
+                    logger.info("send took $dsf ms")
+                    r
                 } else {
                     avcodec_send_frame(codecContext, null)
                 }
 
+                val senc = System.nanoTime()
                 while (ret >= 0) {
                     ret = avcodec_receive_packet(codecContext, packet)
 
@@ -359,8 +376,11 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
                         logger.error("Error writing frame $frameNum: ${ffmpegErrorString(ret)}")
                     }
                 }
+                val denc = (System.nanoTime() - senc)/10e5
+                logger.info("encode took $denc ms")
 
-                logger.trace("Encoded frame $frameNum")
+                val encodeDuration = (System.nanoTime() - encodeStart)/10e5
+                logger.debug("Encoded frame $frameNum in $encodeDuration ms")
 
                 frameNum++
             }
@@ -371,6 +391,7 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
             avformat_free_context(outputContext)
 
             logger.info("Finished recording $outputFile, wrote $frameNum frames.")
+            finished = true
         }
 
         latch.await()
@@ -440,12 +461,31 @@ class H264Encoder(val frameWidth: Int, val frameHeight: Int, filename: String, f
     }
 
     fun encodeFrame(data: ByteBuffer?) {
-        encoderQueue.addLast(QueuedFrame(data, getCurrentTimestamp()))
+        val pressure = encoderQueue.size
+        if(pressure < 3) {
+            encoderQueue.addLast(QueuedFrame(data, getCurrentTimestamp()))
+        } else {
+            logger.warn("Encoder pressure too high, skipping frame")
+        }
     }
 
     fun finish() {
         encodeFrame(null)
         encoding = false
+    }
+
+    fun close() {
+        if(encoding) {
+            logger.info("Closing down, flushing encoder queue.")
+            encoderQueue.clear()
+            finish()
+
+            while(!finished) {
+                Thread.sleep(50)
+            }
+
+            logger.info("Encoder closed.")
+        }
     }
 
     private fun getCurrentTimestamp(): Long {
