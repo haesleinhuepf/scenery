@@ -2333,6 +2333,7 @@ open class VulkanRenderer(hub: Hub,
             .pClearValues(pass.vulkanMetadata.clearValues)
 
         val renderOrderList = ArrayList<Node>(pass.vulkanMetadata.renderLists[commandBuffer]?.size ?: 512)
+        val cam = scene.findObserver() ?: return@runBlocking
 
         // here we discover all the nodes which are relevant for this pass,
         // e.g. which have the same transparency settings as the pass,
@@ -2342,7 +2343,13 @@ open class VulkanRenderer(hub: Hub,
             it.rendererMetadata()?.let { _ ->
                 if (!((pass.passConfig.renderOpaque && it.material.blending.transparent && pass.passConfig.renderOpaque != pass.passConfig.renderTransparent) ||
                         (pass.passConfig.renderTransparent && !it.material.blending.transparent && pass.passConfig.renderOpaque != pass.passConfig.renderTransparent))) {
-                    renderOrderList.add(it)
+                    val bb = it.worldSpaceBoundingBox()
+
+                    if((bb != null && cam.canSee(bb)) || bb == null) {
+                        renderOrderList.add(it)
+                    } else {
+                        logger.info("${it.name} culled")
+                    }
                 } else {
                     return@let
                 }

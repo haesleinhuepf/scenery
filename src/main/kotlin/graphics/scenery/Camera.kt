@@ -3,6 +3,8 @@ package graphics.scenery
 import cleargl.GLMatrix
 import cleargl.GLVector
 import com.jogamp.opengl.math.Quaternion
+import kotlin.math.PI
+import kotlin.math.tan
 
 /**
  * Camera class that may be targeted or oriented
@@ -175,6 +177,19 @@ open class Camera : Node("Camera") {
         })
 
     /**
+     * Transforms a 3D/4D vector from world space to view coordinates.
+     *
+     * @param v - The vector to be transformed into world space.
+     * @return GLVector - [v] transformed into world space.
+     */
+    fun worldToView(v: GLVector): GLVector =
+        this.view.mult(if(v.dimension == 3) {
+            GLVector(v.x(), v.y(), v.z(), 1.0f)
+        } else {
+            v
+        })
+
+    /**
      * Transforms a 2D/3D [vector] from NDC coordinates to world coordinates.
      * If the vector is 2D, [nearPlaneDistance] is assumed for the Z value, otherwise
      * the Z value from the vector is taken.
@@ -226,6 +241,63 @@ open class Camera : Node("Camera") {
         }
 
         return scene.raycast(worldPos, worldDir, ignoredObjects, debug)
+    }
+
+    /**
+     * Returns true if the camera intersects this object's bounding box.
+     */
+    fun canSee(boundingBox: OrientedBoundingBox): Boolean {
+        val z = (forward - position).normalize()
+        val x = z.cross(up).normalize()
+        val y = x.cross(z).normalize()
+
+        val minView = boundingBox.min
+        val maxView = boundingBox.max
+        val mm1 = GLVector(maxView.x(), minView.y(), minView.z())
+        val mm2 = GLVector(minView.x(), maxView.y(), minView.z())
+        val mm3 = GLVector(minView.x(), maxView.y(), maxView.z())
+        val mm4 = GLVector(maxView.x(), minView.y(), maxView.z())
+
+        return tripodCanSee(x, y, z, minView)
+            || tripodCanSee(x, y, z, maxView)
+            || tripodCanSee(x, y, z, mm1)
+            || tripodCanSee(x, y, z, mm2)
+            || tripodCanSee(x, y, z, mm3)
+            || tripodCanSee(x, y, z, mm4)
+            || position.isInside(minView, maxView)
+    }
+
+    private fun GLVector.isInside(min: GLVector, max: GLVector): Boolean {
+        return this.x() > min.x() && this.x() < max.x()
+            && this.y() > min.y() && this.y() < max.y()
+            && this.z() > min.z() && this.z() < max.z()
+    }
+
+    protected inline fun tripodCanSee(x: GLVector, y: GLVector, z: GLVector, p: GLVector): Boolean {
+        val v = p - position
+        val angle = tan(0.5f * fov * PI/180.0f)
+
+        val pcz = v.times(z)
+        if(pcz < nearPlaneDistance || pcz > farPlaneDistance) {
+            logger.info("Plane test failed: $pcz vs $nearPlaneDistance/$farPlaneDistance")
+            return false
+        }
+
+        val pcy = v.times(y)
+        val h = angle * pcz
+        if(pcy < -h || pcy > h) {
+            logger.info("Height test failed: $pcy ∉ [-$h,$h]")
+            return false
+        }
+
+        val pcx = v.times(x)
+        val w = h * aspectRatio()
+        if(pcx < -w || pcx > w) {
+            logger.info("Width test failed: $pcx ∉ [-$w,$w]")
+            return false
+        }
+
+        return true
     }
 }
 

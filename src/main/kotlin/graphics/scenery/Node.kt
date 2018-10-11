@@ -630,6 +630,17 @@ open class Node(open var name: String = "Node") : Renderable, Serializable {
             && this.z() > min.z() && this.z() < max.z()
     }
 
+    fun worldSpaceBoundingBox(): OrientedBoundingBox? {
+        val bb = boundingBox
+        return if(bb != null) {
+            OrientedBoundingBox(
+                world.mult(bb.min.xyzw()).xyz(),
+                world.mult(bb.max.xyzw()).xyz())
+        } else {
+            null
+        }
+    }
+
     companion object NodeHelpers {
         /**
          * Depth-first search for elements in a Scene.
